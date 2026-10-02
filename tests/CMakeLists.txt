@@ -1,0 +1,6 @@
+find_package(Threads REQUIRED)
+add_executable(snapshot_tests snapshot_tests.cpp)
+target_link_libraries(snapshot_tests PRIVATE read_mostly::map Threads::Threads)
+read_mostly_warnings(snapshot_tests)
+add_test(NAME snapshot_tests COMMAND snapshot_tests)
+set_tests_properties(snapshot_tests PROPERTIES TIMEOUT 30)
