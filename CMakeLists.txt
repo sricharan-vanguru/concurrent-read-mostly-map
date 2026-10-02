@@ -11,7 +11,10 @@ if(READ_MOSTLY_ASAN_UBSAN AND READ_MOSTLY_TSAN)
     message(FATAL_ERROR "ASan and TSan require separate builds")
 endif()
 
-add_library(read_mostly_map src/snapshot.cpp src/update_transaction.cpp src/snapshot_builder.cpp)
+find_package(Threads REQUIRED)
+add_library(read_mostly_map src/snapshot.cpp src/update_transaction.cpp src/snapshot_builder.cpp
+    src/read_mostly_map.cpp)
+target_link_libraries(read_mostly_map PUBLIC Threads::Threads)
 add_library(read_mostly::map ALIAS read_mostly_map)
 
 target_compile_features(read_mostly_map PUBLIC cxx_std_20)

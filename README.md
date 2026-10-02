@@ -11,7 +11,7 @@ public contract is:
 - A reader retains ownership of its snapshot for the entire lookup, preventing
   use-after-free after a writer publishes a newer version.
 
-The Phase 2 map implementation will use copy-on-write snapshots with
+The map implementation uses copy-on-write snapshots with
 `std::atomic<std::shared_ptr<const Snapshot>>`. This is a deliberately safe,
 portable C++20 baseline. `load(memory_order_acquire)` pairs with a writer's
 `store(memory_order_release)`: after a reader observes the new pointer, it also
@@ -41,10 +41,23 @@ boundaries, policies, API shape, and performance trade-offs.
 
 ## Build and current status
 
-Phases 0 and 1 implement compiled string-table snapshots, ordered transactions,
-validation limits, tests, and package installation. Concurrent map publication
-starts in Phase 2. See [API contracts](docs/api-contract.md) and
+Phases 0–2 implement compiled snapshots, transactions, validation, atomic
+publication, serialized writers, conditional commits, and close semantics.
+See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
+
+Example:
+
+```cpp
+#include <read_mostly/read_mostly_map.hpp>
+
+read_mostly::ReadMostlyMap config;
+read_mostly::UpdateTransaction batch;
+batch.insert_or_assign("mode", "fast");
+const auto result = config.commit(batch, 0); // Require initial version.
+const auto view = config.acquire_snapshot(); // Own one consistent version.
+const auto mode = view.find_copy("mode");
+```
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug

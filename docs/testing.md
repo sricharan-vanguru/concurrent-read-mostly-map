@@ -16,7 +16,8 @@ Tests cover immutable source preservation, ordered operations, owned inputs,
 old snapshot lifetime, independent transaction copies, moved-from reuse,
 embedded-zero keys/values, limit failures and exact boundaries, empty-batch
 versioning, and eight simultaneous readers. Atomic publication tests belong to
-Phase 2. Allocation failure injection and version exhaustion need Phase 3.
+Phase 2 adds publication tests below. Allocation failure injection and version
+exhaustion tests remain Phase 3 work.
 
 Formatting:
 
@@ -44,3 +45,19 @@ CI includes this check and an external installed-package consumer.
 
 This foundation does not yet measure map update concurrency or production
 performance. Those are tracked explicitly in ROADMAP.md.
+
+## Phase 2 verification — 2026-10-02
+
+Both CTest groups passed in Debug, Release, and ASan/UBSan (including default
+leak detection outside the sandbox). The new map group checks conditional
+conflicts, replacement/duplicate keys, empty updates, close/idempotence,
+retained handles after destruction, failed-update preservation, concurrent
+unique-key writers, competing version-conditional writers, and complete-batch
+reader visibility. Installed-package consumption now exercises ReadMostlyMap
+and its exported thread dependency successfully.
+
+The TSan map group passed on this run, but the snapshot group failed during
+runtime startup with unexpected memory mapping. The overall TSan suite is
+therefore not validated on this host. Formatting and diff checks passed.
+Clang/clang-tidy and remote CI have not been run for these local changes.
+Performance has not yet been benchmarked.

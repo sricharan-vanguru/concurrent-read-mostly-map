@@ -28,7 +28,7 @@ string copying and allocation.
 Independent handle copies and concurrent const lookups are safe. The same
 handle cannot be assigned concurrently with lookup. A transaction cannot be
 mutated while a builder reads it. A builder supports concurrent const builds.
-Phase 1 implements immutable parallel reads, not concurrent map publication.
+ReadMostlyMap implements concurrent publication; see publication.md.
 
 Opaque private storage reduces compilation dependencies. Binary ABI stability
 is not promised at version 0.1. Future allocator extensions must retain their
