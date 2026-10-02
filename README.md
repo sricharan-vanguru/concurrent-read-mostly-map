@@ -43,6 +43,8 @@ boundaries, policies, API shape, and performance trade-offs.
 
 Phases 0–2 implement compiled snapshots, transactions, validation, atomic
 publication, serialized writers, conditional commits, and close semantics.
+Phase 3 adds allocation-failure injection, seeded reference and concurrent
+history tests, close races, and version-increment boundary coverage.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 

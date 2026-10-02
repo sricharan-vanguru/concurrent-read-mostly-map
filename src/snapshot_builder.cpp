@@ -1,6 +1,7 @@
 #include "read_mostly/snapshot_builder.hpp"
 #include "snapshot_data.hpp"
 #include "transaction_data.hpp"
+#include "version.hpp"
 #include <stdexcept>
 #include <utility>
 
@@ -11,9 +12,7 @@ Snapshot SnapshotBuilder::build(const Snapshot &source,
     if (transaction.size() > limits_.max_operations) {
         throw std::length_error("transaction operation limit exceeded");
     }
-    if (source.version() == std::numeric_limits<std::uint64_t>::max()) {
-        throw std::overflow_error("snapshot version exhausted");
-    }
+    const auto candidate_version = detail::next_version(source.version());
     // This copy remains private until all operations and validation succeed.
     auto replacement = std::make_shared<Snapshot::Data>(*source.data_);
     if (transaction.impl_) {
@@ -45,7 +44,7 @@ Snapshot SnapshotBuilder::build(const Snapshot &source,
         }
     }
     replacement->payload_bytes = bytes;
-    replacement->version = source.version() + 1;
+    replacement->version = candidate_version;
     return Snapshot(std::move(replacement));
 }
 } // namespace read_mostly

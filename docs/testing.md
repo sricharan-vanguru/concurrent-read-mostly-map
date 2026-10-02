@@ -17,7 +17,7 @@ old snapshot lifetime, independent transaction copies, moved-from reuse,
 embedded-zero keys/values, limit failures and exact boundaries, empty-batch
 versioning, and eight simultaneous readers. Atomic publication tests belong to
 Phase 2 adds publication tests below. Allocation failure injection and version
-exhaustion tests remain Phase 3 work.
+exhaustion coverage is described in the Phase 3 section below.
 
 Formatting:
 
@@ -61,3 +61,31 @@ runtime startup with unexpected memory mapping. The overall TSan suite is
 therefore not validated on this host. Formatting and diff checks passed.
 Clang/clang-tidy and remote CI have not been run for these local changes.
 Performance has not yet been benchmarked.
+
+## Phase 3 verification — 2026-10-02
+
+Four CTest groups cover the snapshot domain, publication, allocation failures,
+and extended correctness. The allocation-failure executable replaces ordinary
+global new/delete only in that test process. A thread-local budget sweeps each
+ordinary allocation position until success, using long strings to exercise
+heap storage. In the GCC build, commit exercised 8 failure positions and
+replace_all exercised 13. Every failure preserves the published data/version
+and retained handles; a subsequent write succeeds. Rejected closed/conflicting
+updates are checked with a zero-allocation budget. This does not test aligned
+allocation or arbitrary user-defined allocators, which the current API does
+not use.
+
+A seeded 500-batch reference model validates operations and old snapshots.
+Four writers also execute mixed clear/erase/assign updates: recorded commit
+versions establish a replay order, and retained snapshots are compared with
+the corresponding reference state. Close races verify that successful writes
+account for exactly the final version and all writes after close are rejected.
+
+Overflow tests exercise the internal version-increment function used by the
+builder at zero, max-1, and max. They do not perform 2^64 commits or inject an
+arbitrary version into the public map.
+
+Debug and Release tests pass. ASan/UBSan tests run outside the sandbox with leak
+detection. TSan builds, but this run failed during startup with unexpected
+memory mapping (and one startup segmentation fault); the suite is not
+TSan-validated. CI and Clang checks for Phase 3 have not run remotely.
