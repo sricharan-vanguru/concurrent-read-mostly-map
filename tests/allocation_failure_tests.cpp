@@ -1,16 +1,30 @@
 #include "read_mostly/read_mostly_map.hpp"
+#include <barrier>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <new>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
 // Isolated executable only. Fail the Nth ordinary allocation on this thread,
 // including STL storage and the publication wrapper, without production hooks.
 thread_local std::size_t remaining = std::numeric_limits<std::size_t>::max();
+struct AllocationGate {
+    std::barrier<> entered{2};
+    std::barrier<> release{2};
+};
+thread_local AllocationGate *allocation_gate = nullptr;
 void *allocate(std::size_t bytes) {
+    if (allocation_gate) {
+        auto *gate = allocation_gate;
+        allocation_gate = nullptr;
+        gate->entered.arrive_and_wait();
+        gate->release.arrive_and_wait();
+    }
     if (remaining != std::numeric_limits<std::size_t>::max()) {
         if (remaining == 0) {
             throw std::bad_alloc();
@@ -49,42 +63,56 @@ int main() {
         batch.erase("original");
         batch.insert_or_assign(key, value);
         const std::vector<ReadMostlyMap::Entry> replacement{{key, value}};
-        for (const bool replace : {false, true}) {
-            bool reached_success = false;
-            std::size_t failures = 0;
-            for (std::size_t allocation = 0; allocation < 512; ++allocation) {
-                ReadMostlyMap map;
-                check(map.commit(initial).version == 1);
-                const auto retained = map.acquire_snapshot();
-                bool failed = false;
-                {
-                    FailAfter injection(allocation);
-                    try {
-                        if (replace) {
-                            (void)map.replace_all(replacement);
-                        } else {
-                            (void)map.commit(batch);
+        for (const bool tracked : {false, true}) {
+            for (const bool replace : {false, true}) {
+                bool reached_success = false;
+                std::size_t failures = 0;
+                for (std::size_t allocation = 0; allocation < 512; ++allocation) {
+                    MapOptions options;
+                    options.track_retained_snapshots = tracked;
+                    options.collect_update_metrics = tracked;
+                    ReadMostlyMap map({}, options);
+                    // Keep version 0 alive so the next candidate grows the weak
+                    // registry, exercising its allocation-failure guarantee too.
+                    const Snapshot initial_owner = map.acquire_snapshot();
+                    check(map.commit(initial).version == 1);
+                    const auto retained = map.acquire_snapshot();
+                    bool failed = false;
+                    {
+                        FailAfter injection(allocation);
+                        try {
+                            if (replace) {
+                                (void)map.replace_all(replacement);
+                            } else {
+                                (void)map.commit(batch);
+                            }
+                        } catch (const std::bad_alloc &) {
+                            failed = true;
                         }
-                    } catch (const std::bad_alloc &) {
-                        failed = true;
                     }
+                    check(retained.version() == 1 && retained.find_copy("original") == value);
+                    check(initial_owner.version() == 0 && initial_owner.size() == 0);
+                    if (!failed) {
+                        check(map.version() == 2 && map.find_copy(key) == value);
+                        reached_success = true;
+                        break;
+                    }
+                    ++failures;
+                    if (tracked) {
+                        check(map.statistics().exceptions == 1 && map.statistics().commits == 1 &&
+                              map.statistics().attempts == 2);
+                    }
+                    check(map.version() == 1 && map.size() == 1 &&
+                          map.find_copy("original") == value && !map.contains(key));
+                    // Also proves the writer mutex is released after an exception.
+                    const auto recovered =
+                        replace ? map.replace_all(replacement) : map.commit(batch);
+                    check(recovered.version == 2 && map.find_copy(key) == value);
                 }
-                check(retained.version() == 1 && retained.find_copy("original") == value);
-                if (!failed) {
-                    check(map.version() == 2 && map.find_copy(key) == value);
-                    reached_success = true;
-                    break;
-                }
-                ++failures;
-                check(map.version() == 1 && map.size() == 1 && map.find_copy("original") == value &&
-                      !map.contains(key));
-                // Also proves the writer mutex is released after an exception.
-                const auto recovered = replace ? map.replace_all(replacement) : map.commit(batch);
-                check(recovered.version == 2 && map.find_copy(key) == value);
+                check(reached_success && failures > 0);
+                std::cout << (tracked ? "tracked " : "") << (replace ? "replace_all" : "commit")
+                          << ": exercised " << failures << " failing allocation positions\n";
             }
-            check(reached_success && failures > 0);
-            std::cout << (replace ? "replace_all" : "commit") << ": exercised " << failures
-                      << " failing allocation positions\n";
         }
         // Closed/conflicting writes must not allocate a replacement at all.
         ReadMostlyMap rejected;
@@ -97,6 +125,22 @@ int main() {
             FailAfter injection(0);
             check(rejected.replace_all(replacement).status == CommitStatus::closed);
         }
+        // Pause a writer's first candidate allocation while its mutex is held.
+        // Reads still progress; close_until times out without changing state.
+        ReadMostlyMap contended;
+        AllocationGate gate;
+        std::jthread writer([&] {
+            allocation_gate = &gate;
+            (void)contended.commit(batch);
+        });
+        gate.entered.arrive_and_wait();
+        const bool timed_out =
+            !contended.close_until(std::chrono::steady_clock::now() + std::chrono::milliseconds(5));
+        const bool unchanged = contended.version() == 0 && contended.size() == 0;
+        gate.release.arrive_and_wait();
+        writer.join();
+        check(timed_out && unchanged && contended.version() == 1);
+        check(contended.close_until(std::chrono::steady_clock::now() + std::chrono::seconds(1)));
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

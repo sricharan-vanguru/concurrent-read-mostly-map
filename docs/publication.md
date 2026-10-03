@@ -11,8 +11,10 @@ excluding the internal clear. Caller batches/spans must remain valid and
 unmodified during calls.
 
 Each successful update, even an empty/identical batch, increments the version.
-CommitResult reports committed/new version or version_conflict/closed/current
-version. Closed takes precedence over conflicts. Rejections do not build.
+CommitResult reports committed/new version or version_conflict/closed/
+memory_budget_exceeded/current
+version. Closed takes precedence over conflicts. Closed/conflict rejections
+do not build; memory-budget rejection follows candidate construction.
 Allocation/validation errors and version exhaustion propagate without changing
 published state.
 
@@ -32,5 +34,6 @@ read-latency guarantee is made.
 close waits for the active writer, then rejects future writes; it is
 idempotent and reads remain available. Caller threads must finish map methods
 before destruction. Handles remain valid after close or destruction.
-Payload limits do not bound all allocations or memory retained by old handles;
-advanced budgets and reclamation remain future work.
+Optional logical live-payload admission, telemetry, and deadline operations
+are documented in [operations](operations.md). Advanced reclamation remains
+future work.

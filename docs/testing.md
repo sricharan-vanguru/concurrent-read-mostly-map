@@ -89,3 +89,27 @@ Debug and Release tests pass. ASan/UBSan tests run outside the sandbox with leak
 detection. TSan builds, but this run failed during startup with unexpected
 memory mapping (and one startup segmentation fault); the suite is not
 TSan-validated. CI and Clang checks for Phase 3 have not run remotely.
+
+## Phase 4 verification — 2026-10-02
+
+Five groups pass in Debug/Release with warnings-as-errors. ASan/UBSan runs
+outside the sandbox with default leak detection. Installation and an external
+consumer succeed. Formatting and diff checks pass.
+
+Operational tests cover retained handle copies, byte and snapshot-count
+budgets, rejection/retry after release, zero-payload versions, disabled metrics,
+writer counters, exception events, callbacks querying statistics outside the
+writer mutex, concurrent callbacks, drain timeout/recovery, and invalid options.
+An allocation gate pauses a writer under its mutex: reads proceed and timed
+close fails without interrupting the commit.
+
+The allocation sweep now also enables tracking/counters while retaining old
+versions to force registry growth. GCC exercises 9 failing positions for
+tracked commit and 14 for tracked replacement, including registry allocation;
+untracked counts remain 8/13. Failed attempts preserve state and record one
+exception; the next write succeeds.
+
+TSan compilation succeeds but execution fails during runtime startup with
+unexpected memory mapping/startup segmentation faults. Full TSan validation
+still needs a compatible host. These local Phase 4 changes have not run
+through remote CI or Clang tools.

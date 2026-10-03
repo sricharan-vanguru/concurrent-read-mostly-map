@@ -1,13 +1,15 @@
 #pragma once
 
 #include "read_mostly/snapshot_builder.hpp"
+#include "read_mostly/telemetry.hpp"
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <span>
 #include <utility>
 
 namespace read_mostly {
-enum class CommitStatus { committed, version_conflict, closed };
+enum class CommitStatus { committed, version_conflict, closed, memory_budget_exceeded };
 struct CommitResult {
     CommitStatus status;
     // New version on success; currently published version on rejection.
@@ -19,7 +21,7 @@ struct CommitResult {
 class ReadMostlyMap final {
   public:
     using Entry = std::pair<std::string, std::string>;
-    explicit ReadMostlyMap(SnapshotLimits limits = {});
+    explicit ReadMostlyMap(SnapshotLimits limits = {}, MapOptions options = {});
     ~ReadMostlyMap();
     ReadMostlyMap(const ReadMostlyMap &) = delete;
     ReadMostlyMap &operator=(const ReadMostlyMap &) = delete;
@@ -39,6 +41,12 @@ class ReadMostlyMap final {
                 std::optional<std::uint64_t> expected_version = std::nullopt);
     // Wait for active writer, reject future writes, keep reads available.
     void close();
+    // Deadline applies to acquiring the writer lock, not interrupting a commit.
+    [[nodiscard]] bool close_until(std::chrono::steady_clock::time_point deadline);
+    // Requires retention tracking and a closed map. Current-version handles
+    // remain valid; only older published versions are drained.
+    [[nodiscard]] bool drain_retired_until(std::chrono::steady_clock::time_point deadline);
+    [[nodiscard]] MapStatistics statistics() const;
 
   private:
     struct Impl;

@@ -13,7 +13,7 @@ endif()
 
 find_package(Threads REQUIRED)
 add_library(read_mostly_map src/snapshot.cpp src/update_transaction.cpp src/snapshot_builder.cpp
-    src/read_mostly_map.cpp)
+    src/read_mostly_map.cpp src/retention_registry.cpp)
 target_link_libraries(read_mostly_map PUBLIC Threads::Threads)
 add_library(read_mostly::map ALIAS read_mostly_map)
 

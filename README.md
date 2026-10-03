@@ -45,6 +45,9 @@ Phases 0–2 implement compiled snapshots, transactions, validation, atomic
 publication, serialized writers, conditional commits, and close semantics.
 Phase 3 adds allocation-failure injection, seeded reference and concurrent
 history tests, close races, and version-increment boundary coverage.
+Phase 4 adds optional writer-side live-payload/snapshot budgets, retained-version
+metrics, observer events, and deadline close/drain management. See
+[operations](docs/operations.md) for limits and contracts.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 
