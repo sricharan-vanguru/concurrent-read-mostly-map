@@ -48,6 +48,9 @@ history tests, close races, and version-increment boundary coverage.
 Phase 4 adds optional writer-side live-payload/snapshot budgets, retained-version
 metrics, observer events, and deadline close/drain management. See
 [operations](docs/operations.md) for limits and contracts.
+Phase 5 adds standalone throughput/latency and snapshot-cost benchmarks.
+See [benchmark methodology](benchmarks/README.md) for workload controls and
+measurement boundaries.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 

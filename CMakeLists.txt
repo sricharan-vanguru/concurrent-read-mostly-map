@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 project(ConcurrentReadMostlyMap VERSION 0.1.0 LANGUAGES CXX)
 
 option(READ_MOSTLY_BUILD_TESTS "Build tests" ON)
+option(READ_MOSTLY_BUILD_BENCHMARKS "Build standalone benchmarks" OFF)
 
 option(READ_MOSTLY_WARNINGS_AS_ERRORS "Treat library and test warnings as errors" ON)
 option(READ_MOSTLY_ASAN_UBSAN "Enable address and undefined behavior sanitizers" OFF)
@@ -71,4 +72,8 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ReadMostlyMapConfig.cmake
 if(READ_MOSTLY_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(READ_MOSTLY_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()

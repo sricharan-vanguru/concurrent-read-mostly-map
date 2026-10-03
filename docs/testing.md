@@ -113,3 +113,18 @@ TSan compilation succeeds but execution fails during runtime startup with
 unexpected memory mapping/startup segmentation faults. Full TSan validation
 still needs a compatible host. These local Phase 4 changes have not run
 through remote CI or Clang tools.
+
+## Phase 5 verification — 2026-10-03
+
+Release benchmark preset builds with warnings-as-errors and passes nine CTest
+groups: the existing five, mixed workload, batched/burst workload, snapshot
+cost/retention experiment, and invalid workload parameters. Local sample
+and interpretation limits are recorded in benchmarks/local-smoke.md.
+The throughput executable and profiler are separate so allocation-counting
+overhead cannot contaminate the normal throughput adapter.
+Benchmark CI and expanded formatting/static-analysis coverage are configured;
+remote checks for these local changes have not run.
+The same nine groups also pass in a separate Debug ASan/UBSan build with
+benchmarks enabled and leak detection outside the sandbox. Sanitizer timing
+is not included in performance samples. Manual smoke sweeps exercised 1/4
+workers, 0/1/10 permille writes, batched burst traffic, and larger keys/values.

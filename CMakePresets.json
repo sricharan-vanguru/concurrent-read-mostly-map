@@ -5,19 +5,22 @@
     {"name": "release", "inherits": "debug", "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}},
     {"name": "asan-ubsan", "inherits": "debug", "cacheVariables": {"READ_MOSTLY_ASAN_UBSAN": "ON"}},
     {"name": "tsan", "inherits": "debug", "cacheVariables": {"READ_MOSTLY_TSAN": "ON"}},
-    {"name": "install", "inherits": "release", "cacheVariables": {"CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install-prefix"}}
+    {"name": "install", "inherits": "release", "cacheVariables": {"CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install-prefix"}},
+    {"name": "benchmarks", "inherits": "release", "cacheVariables": {"READ_MOSTLY_BUILD_BENCHMARKS": "ON"}}
   ],
   "buildPresets": [
     {"name": "debug", "configurePreset": "debug"},
     {"name": "release", "configurePreset": "release"},
     {"name": "asan-ubsan", "configurePreset": "asan-ubsan"},
     {"name": "tsan", "configurePreset": "tsan"},
-    {"name": "install", "configurePreset": "install", "targets": ["install"]}
+    {"name": "install", "configurePreset": "install", "targets": ["install"]},
+    {"name": "benchmarks", "configurePreset": "benchmarks"}
   ],
   "testPresets": [
     {"name": "debug", "configurePreset": "debug", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}},
     {"name": "release", "configurePreset": "release", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}},
     {"name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}},
-    {"name": "tsan", "configurePreset": "tsan", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}}
+    {"name": "tsan", "configurePreset": "tsan", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}},
+    {"name": "benchmarks", "configurePreset": "benchmarks", "output": {"outputOnFailure": true}, "execution": {"noTestsAction": "error"}}
   ]
 }
