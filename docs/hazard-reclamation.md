@@ -1,11 +1,21 @@
 # Experimental hazard-pointer backend
 
+[Documentation home](README.md) · Prerequisites: [Publication](publication.md), [Tutorial](tutorial.md)
+
+Start with shared ownership unless measurements justify this extra complexity.
+“Hazard” means a public announcement that a reader may still access a particular
+wrapper address. A writer must not reclaim that retired wrapper while a slot
+protects it. This registry is separate from the payload retention registry.
+
 The default shared-ownership implementation remains the safe starting point.
 This opt-in backend targets repeated guarded reads without incrementing the
 globally shared snapshot reference count. It uses a custom C++20 protocol,
 not the standard-library C++26 hazard-pointer API. Background:
 [WG21 P2530R3](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p2530r3.pdf)
 describes protection and deferred reclamation and includes a read-mostly example.
+
+API fragment inside a program; for a complete executable see the
+[tutorial guard example](tutorial.md):
 
 ```cpp
 read_mostly::MapOptions options;
@@ -20,6 +30,21 @@ auto reader = map.register_reader(); // Register once per independent reader.
 ```
 
 ## Protection protocol and ordering argument
+
+```mermaid
+flowchart TD
+    loadHead["Load current pointer"] --> announce["Store pointer in slot"]
+    announce --> validate["Load current again"]
+    validate --> comparePointers{"Pointers match?"}
+    comparePointers -->|"No"| loadHead
+    comparePointers -->|"Yes"| useData["Read validated snapshot"]
+    useData --> clearSlot["Guard clears protection"]
+```
+
+The first pointer is never dereferenced before validation. If publication changes
+the head during acquisition, the loop retries. The guard clears protection after
+its final access. A matching second load returns the freshly validated pointer,
+which matters when memory addresses are reused.
 
 The reader uses sequentially consistent pointer atomics:
 
@@ -52,10 +77,26 @@ active-guard invariant. It is a simplified ordering model, not a full C++
 memory-model verifier. Stress, sanitizer, and code review supplement this
 argument; they do not prove all possible executions or production readiness.
 Independent protocol review remains open. Local Clang TSan now passes all
-applicable groups, including three repeated runs; remote validation of the
-updated code is still required. See [verification](testing.md) for exclusions.
+applicable groups, including three repeated runs. GitHub CI for `9e99cd7` also
+passed GCC and Clang TSan jobs. These results do not replace independent protocol
+review. See [verification](testing.md) for exclusions and the newer local-only
+documentation checks.
 
 ## Registration and lifetime
+
+```mermaid
+flowchart LR
+    reader["HazardReader"] -->|"Owns"| slot["Protection slot"]
+    guard["HazardGuard"] -->|"Owns while reading"| slot
+    slot -->|"Owns"| domain["HazardDomain"]
+    domain -.->|"Weak slot record"| slot
+    domain -->|"Owns"| wrappers["Current and retired wrappers"]
+```
+
+There is no strong ownership cycle: the domain's slot reference is weak.
+Destroying the reader does not invalidate an existing guard. After the map is
+destroyed, remaining registrations keep the domain alive. This does not permit
+concurrent calls on a facade being destroyed.
 
 Registration allocates a slot and updates a weak slot list under a mutex.
 Existing readers acquire guards without registration, allocation, or that

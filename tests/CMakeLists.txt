@@ -33,4 +33,22 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME benchmark_gate_tests COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/benchmark_gate_tests.py)
     set_tests_properties(benchmark_gate_tests PROPERTIES TIMEOUT 30)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set(doc_flags)
+        if(NOT READ_MOSTLY_NATIVE_ATOMICS)
+            list(APPEND doc_flags --atomic)
+        endif()
+        if(READ_MOSTLY_ASAN_UBSAN OR READ_MOSTLY_TSAN)
+            list(APPEND doc_flags "--compile-option=-fsanitize=${sanitizer}")
+        endif()
+        if(READ_MOSTLY_BUILD_FUZZER)
+            list(APPEND doc_flags --compile-option=-fsanitize=fuzzer-no-link,address,undefined)
+        endif()
+        add_test(NAME documentation_examples COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tools/check_docs.py --root ${PROJECT_SOURCE_DIR}
+            --compile-examples --compiler ${CMAKE_CXX_COMPILER}
+            --library $<TARGET_FILE:read_mostly_map> --include ${PROJECT_SOURCE_DIR}/include
+            --output ${PROJECT_BINARY_DIR}/doc-examples ${doc_flags})
+        set_tests_properties(documentation_examples PROPERTIES TIMEOUT 180)
+    endif()
 endif()

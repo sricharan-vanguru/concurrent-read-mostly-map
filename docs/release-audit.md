@@ -47,7 +47,9 @@ passes. Local Clang TSan passes ten applicable groups. Its strong allocation
 interceptors conflict with the dedicated allocation-failure executable's
 overrides, so that test is excluded specifically from Clang TSan and remains
 covered by ordinary and ASan builds. Allocation-profile benchmarks similarly
-require a separate build. Remote validation still requires the updated commit.
+require a separate build. GitHub CI for `9e99cd7` subsequently passed all eleven
+jobs, including both compilers' TSan builds. See the current verification entry
+in [testing](testing.md); scheduled-nightly evidence remains a separate gate.
 
 Linux GCC/Clang are the current CI targets. CMake has MSVC warning support, but
 Windows/macOS, alternate standard libraries and weak-memory hardware have not

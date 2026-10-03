@@ -204,3 +204,24 @@ GitHub's existing fd545b5 run was inspected and failed; these local fixes have
 not been pushed or verified remotely. Independent hazard review, remote checks
 and dedicated-hardware performance approval remain open. MIT was subsequently
 selected with owner authorization and added to source/binary package checks.
+
+## Documentation and current CI verification — 2026-10-03
+
+The historical entries above describe what was known at their recording time.
+The subsequent [GitHub CI run for `9e99cd7`](https://github.com/sricharan-vanguru/concurrent-read-mostly-map/actions/runs/37100007892)
+passed all eleven jobs: quality, GCC/Clang Debug, Release, ASan/UBSan and TSan,
+fuzz, and benchmark smoke. This is push-workflow evidence, not evidence that a
+scheduled nightly run completed or that the experimental backend is approved.
+
+The newer documentation changes are local and are not included in that run.
+Their offline checker covers 20 Markdown pages and 119 local links. Seven
+complete annotated C++ examples compile and execute as the new
+`documentation_examples` CTest group. GCC Debug passes 12 groups; GCC Release
+and ASan/UBSan pass 16 each. The ASan/UBSan run used default leak detection
+outside the restricted sandbox. All ten Mermaid diagrams render successfully
+using a local Mermaid runtime and an isolated headless browser; no diagram
+source is sent to an external rendering service.
+
+Reproduce the documentation checks using [the contributing guide](contributing.md).
+Independent hazard review, scheduled-nightly verification, broader platform
+coverage and dedicated-hardware performance approval remain open.

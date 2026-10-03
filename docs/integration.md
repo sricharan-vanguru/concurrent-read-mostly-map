@@ -1,6 +1,8 @@
 # Integration guide
 
-Link the installed CMake target rather than copying implementation files:
+Start with the complete consumer project in [getting started](getting-started.md).
+Link the installed CMake target rather than copying implementation files.
+This fragment belongs after your CMake `project(...)` declaration:
 
 ```cmake
 find_package(ReadMostlyMap 0.1 CONFIG REQUIRED)
@@ -50,7 +52,8 @@ Rebuild consumers with the same headers, compiler/standard library ABI, and
 compatible build flags. The installed CMake package checks minor-version
 compatibility, not ABI identity. Private implementation types reduce coupling
 but do not by themselves guarantee ABI compatibility. Experimental APIs may
-change or be removed. A stable release must first define its deprecation policy.
+change or be removed. A stable release must satisfy its release gates and adopt
+the documented stable deprecation policy.
 
 The project is licensed under [MIT](../LICENSE). Reuse, modification and
 commercial distribution are permitted; preserve the copyright and permission

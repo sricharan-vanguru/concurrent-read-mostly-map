@@ -5,7 +5,9 @@
 - [x] Baseline ownership, publication ordering, failure atomicity, budgets and
   shutdown contracts documented; hazard backend clearly experimental.
 - [x] Nightly repeated tests and benchmark artifact workflow configured.
-- [ ] Verify remote CI/nightly results on both compilers and compatible TSan hosts.
+- [x] Verify GitHub CI for `9e99cd7`: GCC/Clang Debug, Release, ASan/UBSan,
+  TSan, quality, fuzz and benchmark smoke jobs passed.
+- [ ] Verify scheduled nightly runs; a passing push workflow is not nightly evidence.
 - [x] Local Clang TSan applicable suite passes (allocation interceptor test
   belongs to ordinary/ASan builds).
 - [ ] Independently review hazard protection, address reuse, slot registration,
@@ -37,4 +39,4 @@ in 61 seconds without failures; corpus remains under ignored build outputs.
 See [fuzzing](fuzzing.md), [compatibility](compatibility.md),
 [audit](release-audit.md) and [performance gate](../benchmarks/README.md).
 These additions do not close independent review, dedicated-host baseline,
-or remote CI verification gates. Licensing is now resolved by selecting MIT.
+or scheduled-nightly verification gates. Licensing is now resolved by selecting MIT.

@@ -1,97 +1,120 @@
 # Concurrent Read-Mostly Map
 
-Licensed under the [MIT License](LICENSE) (SPDX: `MIT`).
+A compiled C++20 string-to-string map for applications that read shared data
+frequently and change it occasionally: configuration, feature flags, or small
+routing tables. Licensed under [MIT](LICENSE).
 
-A production-minded C++20 library for configuration maps, feature-flag tables,
-and routing tables with many concurrent readers and rare writes. The intended
-public contract is:
+The central idea: **readers use a complete, unchanged version while a writer
+prepares the next version separately.** The writer then changes which version
+new readers receive. Existing readers keep their old view.
 
-- Readers never take the application writer mutex; strict progress depends on
-  the publication/reclamation backend.
-- Each read observes one immutable, internally consistent map snapshot.
-- A writer builds a replacement snapshot privately, then publishes it atomically.
-- A reader retains ownership of its snapshot for the entire lookup, preventing
-  use-after-free after a writer publishes a newer version.
-
-The map implementation uses copy-on-write snapshots with
-`std::atomic<std::shared_ptr<const Snapshot>>`. This is a deliberately safe,
-portable C++20 baseline. `load(memory_order_acquire)` pairs with a writer's
-`store(memory_order_release)`: after a reader observes the new pointer, it also
-observes the fully initialized immutable map. A writer mutex serializes
-read-copy-modify-publish operations so two writers cannot lose each other's
-updates. Shared ownership keeps a retired snapshot alive until its last reader
-finishes.
-
-This does **not** promise that `shared_ptr` reference-count operations are
-lock-free. Its purpose is a portable, memory-safe reference implementation.
-An opt-in experimental hazard-pointer backend uses registered read guards and
-reclaims replaced snapshots after checking that no guard protects them.
-See [protocol and lifecycle](docs/hazard-reclamation.md) for ordering, ownership,
-progress guarantees, and remaining validation work.
-
-## Planned shape
-
-```text
-reader: atomic load snapshot -> retain ownership -> lookup immutable map
-
-writer: lock writer mutex -> copy current snapshot -> modify copy
-        -> release-store replacement -> unlock
+```mermaid
+flowchart LR
+    readerA["Reader A"] -->|"Owns old view"| versionOne["Immutable version 1"]
+    readerB["Reader B"] -->|"Acquires current"| currentHead["Current pointer"]
+    currentHead --> versionTwo["Immutable version 2"]
+    writer["Writer"] -->|"Builds privately"| candidate["Candidate version 3"]
+    candidate -.->|"Publishes when ready"| currentHead
 ```
 
-The implementation roadmap is kept locally. See
-[the architecture](docs/architecture.md) for component
-boundaries, policies, API shape, and performance trade-offs.
+The writer prepares version 3 while new readers still receive version 2.
+Reader A continues using version 1. No reader modifies a published table.
 
-## Build and current status
+## Start here
 
-Phases 0–2 implement compiled snapshots, transactions, validation, atomic
-publication, serialized writers, conditional commits, and close semantics.
-Phase 3 adds allocation-failure injection, seeded reference and concurrent
-history tests, close races, and version-increment boundary coverage.
-Phase 4 adds optional writer-side live-payload/snapshot budgets, retained-version
-metrics, observer events, and deadline close/drain management. See
-[operations](docs/operations.md) for limits and contracts.
-Phase 5 adds standalone throughput/latency and snapshot-cost benchmarks.
-See [benchmark methodology](benchmarks/README.md) for workload controls and
-measurement boundaries.
-Phase 6 adds the experimental guarded backend and hazard benchmark adapter;
-shared ownership remains the default.
-Phase 7 starts integration examples, a separate exact-path routing adapter,
-multi-seed model tests, and nightly stress/benchmark artifacts. See
-[integration](docs/integration.md) and the open
-[release gates](docs/release-checklist.md); this is not a production release.
-Release hardening adds [coverage-guided fuzzing](docs/fuzzing.md), a
-metadata-aware throughput comparison tool, [compatibility policy](docs/compatibility.md)
-and a [local release audit](docs/release-audit.md). CPack can build pre-stable
-archives; independent review and release approval remain open.
-See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
-[verification](docs/testing.md).
+New to concurrency? Read these in order:
 
-Example:
+1. [Documentation map](docs/README.md): choose a learning path.
+2. [Concepts in plain English](docs/concepts.md): snapshot, transaction,
+   publication, retention registry, telemetry, and ownership.
+3. [Getting started](docs/getting-started.md): build and run your first program.
+4. [Step-by-step tutorial](docs/tutorial.md): updates, conflicts, budgets,
+   concurrent reads, and the experimental backend.
 
-```cpp
-#include <read_mostly/read_mostly_map.hpp>
+Experienced C++ users: start with the [API reference](docs/api-contract.md),
+[architecture](docs/architecture.md), and [publication/memory ordering](docs/publication.md).
+See [operations](docs/operations.md) for retention, metrics and shutdown, or
+[integration](docs/integration.md) to link the installed package into your service.
 
-read_mostly::ReadMostlyMap config;
-read_mostly::UpdateTransaction batch;
-batch.insert_or_assign("mode", "fast");
-const auto result = config.commit(batch, 0); // Require initial version.
-const auto view = config.acquire_snapshot(); // Own one consistent version.
-const auto mode = view.find_copy("mode");
+## Build and run
+
+Requirements: C++20 compiler, CMake 3.24 or newer, and Ninja for the presets.
+The library depends on native threads and, on some toolchains, the system atomic
+runtime detected by CMake. Python is optional for documentation/tool checks.
+From the repository root:
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+./build/debug/examples/config_reload_example
+./build/debug/examples/routing_example
 ```
 
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-ctest --test-dir build --output-on-failure
+If Ninja is unavailable, use a fresh directory with CMake's default generator:
+
+```sh
+cmake -S . -B build/manual -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/manual
+ctest --test-dir build/manual --output-on-failure
 ```
+
+The [getting-started guide](docs/getting-started.md) includes a complete program,
+expected output and installed-package instructions.
+
+## What the library guarantees
+
+- One acquired snapshot sees a consistent immutable table, including related keys.
+- Readers do not acquire the application's writer mutex.
+- Writers serialize the entire copy/build/publish operation, avoiding lost writes.
+- Failed validation, allocation or admission does not partially change the published table.
+- Owning snapshots keep their data alive across later writes and map destruction.
+- Version-checked updates reject stale edits. Closing rejects writes, not reads.
+
+The default backend uses atomic shared ownership. It does **not** promise
+lock-free or wait-free reads: standard-library atomics/refcounts can use
+internal synchronization, and final-owner destruction may run on a reader thread.
+The [experimental hazard backend](docs/hazard-reclamation.md) offers reusable
+registered guards with additional protocol and lifecycle restrictions.
+
+## When it fits—and when it does not
+
+Good fit: many lookups, rare updates, manageable tables, and requests that
+benefit from one stable view. Updates copy the entire table, so a large,
+write-heavy database is not a good fit. This is an in-memory library, not a
+persistent database, network server, or full RCU implementation.
+
+Hash lookup is average O(1), worst-case O(n). Updating is average O(n + k), where
+n is table size and k is the number of operations, plus string copying and
+allocation. Long-lived views retain old versions. Benchmark your workload;
+the project makes no universal speedup claim.
+
+## Status and further reading
+
+Version 0.1 is pre-stable. The core library, budgets, telemetry, examples,
+benchmarks, model tests and fuzzing are implemented. The hazard backend remains
+experimental. [Testing](docs/testing.md) records local evidence, not independent
+protocol approval. See the [release gates](docs/release-checklist.md) and
+[compatibility policy](docs/compatibility.md).
+
+- [Benchmark methodology and regression tools](benchmarks/README.md)
+- [Coverage-guided fuzzing and replay](docs/fuzzing.md)
+- [Troubleshooting and common mistakes](docs/troubleshooting.md)
+- [Contributor and documentation workflow](docs/contributing.md)
 
 ## Repository layout
 
 ```text
-include/read_mostly/  Small public declarations
-src/                  Compiled storage, transaction, and builder implementation
-tests/                Unit, stress, and sanitizer tests
-benchmarks/           Read/write throughput and latency benchmarks
-docs/                 API and concurrency-contract documentation
+include/read_mostly/  Small public .hpp declarations
+src/                 Compiled .cpp implementation and private helpers
+examples/            Runnable config reload and exact-path routing examples
+tests/               Unit, failure-injection, concurrent, model and replay tests
+benchmarks/          Workload comparisons and snapshot-cost experiments
+tools/               Performance, package and documentation checks
+docs/                Beginner guides, API reference and engineering contracts
+.github/workflows/   Compiler/sanitizer checks, fuzzing and nightly stress
 ```
+
+Most implementation lives in `.cpp` files. Public `.hpp` files declare the API;
+consumers link the compiled `read_mostly::map` CMake target. The roadmap is
+intentionally local and is not published.
