@@ -1,5 +1,6 @@
 #pragma once
 
+#include "read_mostly/hazard_reader.hpp"
 #include "read_mostly/snapshot_builder.hpp"
 #include "read_mostly/telemetry.hpp"
 #include <chrono>
@@ -29,6 +30,8 @@ class ReadMostlyMap final {
     ReadMostlyMap &operator=(ReadMostlyMap &&) = delete;
 
     [[nodiscard]] Snapshot acquire_snapshot() const;
+    // Experimental backend only; registration is outside the hot read path.
+    [[nodiscard]] HazardReader register_reader() const;
     [[nodiscard]] std::optional<std::string> find_copy(std::string_view key) const;
     [[nodiscard]] bool contains(std::string_view key) const;
     [[nodiscard]] std::size_t size() const;

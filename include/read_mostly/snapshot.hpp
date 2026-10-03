@@ -10,6 +10,9 @@
 namespace read_mostly {
 class SnapshotBuilder;
 class OwningPublication;
+namespace detail {
+class HazardDomain;
+}
 
 // A cheap, owning handle. Copies share immutable storage; even references
 // returned by find remain valid while any copy of this snapshot stays alive.
@@ -32,5 +35,6 @@ class Snapshot final {
     std::shared_ptr<const Data> data_;
     friend class SnapshotBuilder;
     friend class OwningPublication;
+    friend class detail::HazardDomain;
 };
 } // namespace read_mostly

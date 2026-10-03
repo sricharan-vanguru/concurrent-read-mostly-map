@@ -1,4 +1,5 @@
 #include "read_mostly/read_mostly_map.hpp"
+#include "hazard_domain.hpp"
 #include "owning_publication.hpp"
 #include <algorithm>
 #include <limits>
@@ -8,6 +9,17 @@
 
 namespace read_mostly {
 namespace {
+bool acquire_until(std::unique_lock<std::mutex> &lock,
+                   std::chrono::steady_clock::time_point deadline) {
+    while (!lock.try_lock()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_until(std::min(deadline, now + std::chrono::milliseconds(1)));
+    }
+    return true;
+}
 void add_saturated(std::uint64_t &counter, std::uint64_t amount = 1) noexcept {
     counter += std::min(amount, std::numeric_limits<std::uint64_t>::max() - counter);
 }
@@ -27,15 +39,26 @@ UpdateOutcome outcome(CommitStatus status) noexcept {
 } // namespace
 struct ReadMostlyMap::Impl {
     Impl(SnapshotLimits configured_limits, MapOptions configured_options)
-        : options(configured_options), registry(options), publication(registry),
-          limits(configured_limits) {}
+        : options(configured_options), registry(options), limits(configured_limits) {
+        if (options.backend == PublicationBackend::experimental_hazard) {
+            hazard = std::make_shared<detail::HazardDomain>(registry);
+        } else {
+            publication = std::make_unique<OwningPublication>(registry);
+        }
+    }
     MapOptions options;
     RetentionRegistry registry;
-    OwningPublication publication;
-    mutable std::timed_mutex writer_mutex;
+    std::unique_ptr<OwningPublication> publication;
+    std::shared_ptr<detail::HazardDomain> hazard;
+    mutable std::mutex writer_mutex;
     SnapshotLimits limits;
     bool closed = false;
     MapStatistics counters;
+
+    // Writer mutex protects the raw-pointer backend's owner and retire list.
+    Snapshot current_snapshot() const {
+        return hazard ? hazard->current_snapshot() : publication->acquire();
+    }
 
     std::optional<CommitResult> rejection(const Snapshot &current,
                                           std::optional<std::uint64_t> expected) const {
@@ -51,7 +74,9 @@ struct ReadMostlyMap::Impl {
                          SnapshotLimits build_limits) {
         auto candidate = SnapshotBuilder(build_limits).build(source, transaction);
         const auto next_version = candidate.version();
-        if (!publication.publish(candidate, registry)) {
+        const bool accepted = hazard ? hazard->publish(candidate, registry)
+                                     : publication->publish(candidate, registry);
+        if (!accepted) {
             return {CommitStatus::memory_budget_exceeded, source.version()};
         }
         return {CommitStatus::committed, next_version};
@@ -107,7 +132,7 @@ struct ReadMostlyMap::Impl {
             }
             return result;
         } catch (...) {
-            const auto event = event_for(UpdateOutcome::exception, publication.acquire().version());
+            const auto event = event_for(UpdateOutcome::exception, current_snapshot().version());
             record(event);
             lock.unlock();
             if (options.observer) {
@@ -118,7 +143,12 @@ struct ReadMostlyMap::Impl {
     }
     MapStatistics inspect() {
         auto result = counters;
-        const auto current = publication.acquire();
+        if (hazard) {
+            hazard->collect();
+        }
+        const auto current = current_snapshot();
+        result.hazard_backend = static_cast<bool>(hazard);
+        result.hazard_retired_wrappers = hazard ? hazard->retired_count() : 0;
         result.update_metrics_enabled = options.collect_update_metrics;
         result.closed = closed;
         result.current_version = current.version();
@@ -131,7 +161,20 @@ struct ReadMostlyMap::Impl {
 ReadMostlyMap::ReadMostlyMap(SnapshotLimits limits, MapOptions options)
     : impl_(std::make_unique<Impl>(limits, options)) {}
 ReadMostlyMap::~ReadMostlyMap() = default;
-Snapshot ReadMostlyMap::acquire_snapshot() const { return impl_->publication.acquire(); }
+Snapshot ReadMostlyMap::acquire_snapshot() const {
+    if (impl_->hazard) {
+        // Compatibility API: ephemeral registration plus owned data copy.
+        // For repeated reads use a pre-registered reader and guard instead.
+        return impl_->hazard->register_reader().acquire().copy_snapshot();
+    }
+    return impl_->publication->acquire();
+}
+HazardReader ReadMostlyMap::register_reader() const {
+    if (!impl_->hazard) {
+        throw std::logic_error("map does not use the hazard backend");
+    }
+    return impl_->hazard->register_reader();
+}
 std::optional<std::string> ReadMostlyMap::find_copy(std::string_view key) const {
     return acquire_snapshot().find_copy(key);
 }
@@ -143,7 +186,7 @@ std::uint64_t ReadMostlyMap::version() const { return acquire_snapshot().version
 CommitResult ReadMostlyMap::commit(const UpdateTransaction &transaction,
                                    std::optional<std::uint64_t> expected_version) {
     return impl_->update([&] {
-        const auto current = impl_->publication.acquire();
+        const auto current = impl_->current_snapshot();
         if (const auto rejected = impl_->rejection(current, expected_version)) {
             return *rejected;
         }
@@ -153,7 +196,7 @@ CommitResult ReadMostlyMap::commit(const UpdateTransaction &transaction,
 CommitResult ReadMostlyMap::replace_all(std::span<const Entry> entries,
                                         std::optional<std::uint64_t> expected_version) {
     return impl_->update([&] {
-        const auto current = impl_->publication.acquire();
+        const auto current = impl_->current_snapshot();
         if (const auto rejected = impl_->rejection(current, expected_version)) {
             return *rejected;
         }
@@ -178,7 +221,7 @@ void ReadMostlyMap::close() {
 }
 bool ReadMostlyMap::close_until(std::chrono::steady_clock::time_point deadline) {
     std::unique_lock lock(impl_->writer_mutex, std::defer_lock);
-    if (!lock.try_lock_until(deadline)) {
+    if (!acquire_until(lock, deadline)) {
         return false;
     }
     impl_->closed = true;
@@ -188,7 +231,7 @@ bool ReadMostlyMap::drain_retired_until(std::chrono::steady_clock::time_point de
     for (;;) {
         {
             std::unique_lock lock(impl_->writer_mutex, std::defer_lock);
-            if (!lock.try_lock_until(deadline)) {
+            if (!acquire_until(lock, deadline)) {
                 return false;
             }
             if (!impl_->closed || !impl_->registry.enabled()) {

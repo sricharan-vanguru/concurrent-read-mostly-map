@@ -63,56 +63,86 @@ int main() {
         batch.erase("original");
         batch.insert_or_assign(key, value);
         const std::vector<ReadMostlyMap::Entry> replacement{{key, value}};
-        for (const bool tracked : {false, true}) {
-            for (const bool replace : {false, true}) {
-                bool reached_success = false;
-                std::size_t failures = 0;
-                for (std::size_t allocation = 0; allocation < 512; ++allocation) {
-                    MapOptions options;
-                    options.track_retained_snapshots = tracked;
-                    options.collect_update_metrics = tracked;
-                    ReadMostlyMap map({}, options);
-                    // Keep version 0 alive so the next candidate grows the weak
-                    // registry, exercising its allocation-failure guarantee too.
-                    const Snapshot initial_owner = map.acquire_snapshot();
-                    check(map.commit(initial).version == 1);
-                    const auto retained = map.acquire_snapshot();
-                    bool failed = false;
-                    {
-                        FailAfter injection(allocation);
-                        try {
-                            if (replace) {
-                                (void)map.replace_all(replacement);
-                            } else {
-                                (void)map.commit(batch);
+        for (const auto backend :
+             {PublicationBackend::shared_ownership, PublicationBackend::experimental_hazard}) {
+            for (const bool tracked : {false, true}) {
+                for (const bool replace : {false, true}) {
+                    bool reached_success = false;
+                    std::size_t failures = 0;
+                    for (std::size_t allocation = 0; allocation < 512; ++allocation) {
+                        MapOptions options;
+                        options.backend = backend;
+                        options.track_retained_snapshots = tracked;
+                        options.collect_update_metrics = tracked;
+                        ReadMostlyMap map({}, options);
+                        // Keep version 0 alive so the next candidate grows the weak
+                        // registry, exercising its allocation-failure guarantee too.
+                        const Snapshot initial_owner = map.acquire_snapshot();
+                        check(map.commit(initial).version == 1);
+                        const auto retained = map.acquire_snapshot();
+                        bool failed = false;
+                        {
+                            FailAfter injection(allocation);
+                            try {
+                                if (replace) {
+                                    (void)map.replace_all(replacement);
+                                } else {
+                                    (void)map.commit(batch);
+                                }
+                            } catch (const std::bad_alloc &) {
+                                failed = true;
                             }
-                        } catch (const std::bad_alloc &) {
-                            failed = true;
                         }
+                        check(retained.version() == 1 && retained.find_copy("original") == value);
+                        check(initial_owner.version() == 0 && initial_owner.size() == 0);
+                        if (!failed) {
+                            check(map.version() == 2 && map.find_copy(key) == value);
+                            reached_success = true;
+                            break;
+                        }
+                        ++failures;
+                        if (tracked) {
+                            check(map.statistics().exceptions == 1 &&
+                                  map.statistics().commits == 1 && map.statistics().attempts == 2);
+                        }
+                        check(map.version() == 1 && map.size() == 1 &&
+                              map.find_copy("original") == value && !map.contains(key));
+                        // Also proves the writer mutex is released after an exception.
+                        const auto recovered =
+                            replace ? map.replace_all(replacement) : map.commit(batch);
+                        check(recovered.version == 2 && map.find_copy(key) == value);
                     }
-                    check(retained.version() == 1 && retained.find_copy("original") == value);
-                    check(initial_owner.version() == 0 && initial_owner.size() == 0);
-                    if (!failed) {
-                        check(map.version() == 2 && map.find_copy(key) == value);
-                        reached_success = true;
-                        break;
-                    }
-                    ++failures;
-                    if (tracked) {
-                        check(map.statistics().exceptions == 1 && map.statistics().commits == 1 &&
-                              map.statistics().attempts == 2);
-                    }
-                    check(map.version() == 1 && map.size() == 1 &&
-                          map.find_copy("original") == value && !map.contains(key));
-                    // Also proves the writer mutex is released after an exception.
-                    const auto recovered =
-                        replace ? map.replace_all(replacement) : map.commit(batch);
-                    check(recovered.version == 2 && map.find_copy(key) == value);
+                    check(reached_success && failures > 0);
+                    std::cout << (backend == PublicationBackend::experimental_hazard ? "hazard "
+                                                                                     : "")
+                              << (tracked ? "tracked " : "") << (replace ? "replace_all" : "commit")
+                              << ": exercised " << failures << " failing allocation positions\n";
                 }
-                check(reached_success && failures > 0);
-                std::cout << (tracked ? "tracked " : "") << (replace ? "replace_all" : "commit")
-                          << ": exercised " << failures << " failing allocation positions\n";
             }
+        }
+        MapOptions fast_options;
+        fast_options.backend = PublicationBackend::experimental_hazard;
+        ReadMostlyMap fast({}, fast_options);
+        (void)fast.commit(initial);
+        auto registered = fast.register_reader();
+        {
+            FailAfter no_allocation(0);
+            const auto guard = registered.acquire();
+            check(guard.find("original")->size() == value.size());
+        }
+        for (std::size_t fail_at = 0; fail_at < 2; ++fail_at) {
+            ReadMostlyMap registration_target({}, fast_options);
+            bool registration_failed = false;
+            {
+                FailAfter injection(fail_at);
+                try {
+                    (void)registration_target.register_reader();
+                } catch (const std::bad_alloc &) {
+                    registration_failed = true;
+                }
+            }
+            check(registration_failed);
+            check(registration_target.register_reader().acquire().version() == 0);
         }
         // Closed/conflicting writes must not allocate a replacement at all.
         ReadMostlyMap rejected;

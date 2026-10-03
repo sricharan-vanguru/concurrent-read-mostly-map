@@ -128,3 +128,34 @@ The same nine groups also pass in a separate Debug ASan/UBSan build with
 benchmarks enabled and leak detection outside the sandbox. Sanitizer timing
 is not included in performance samples. Manual smoke sweeps exercised 1/4
 workers, 0/1/10 permille writes, batched burst traffic, and larger keys/values.
+
+## Phase 6 verification — 2026-10-03
+
+Debug passes six test groups; Release benchmark and ASan/UBSan builds pass ten.
+Hazard tests cover simplified SC-order enumeration, old-view protection,
+independent nesting, same-reader nesting rejection, move behavior, reader/guard
+survival after map/reader destruction, owning conversion, delayed-guard budgets
+and drain, concurrent readers/writes, concurrent producers, and owning-backend
+behavior cross-checks.
+
+Allocation-failure sweeps cover both backends, with/without tracking. A
+zero-allocation budget verifies registered guard acquisition/borrowed lookup.
+Registration failure and subsequent registration recovery are also tested.
+This remains an ordinary-allocation interceptor, not all allocator types.
+The internal retirement scan/protection uses SC atomics; the ordering model is
+not a comprehensive weak-memory verification tool.
+
+Hazard benchmark contexts register once outside timing and reuse guards.
+No production-performance or whole-library lock-free claim is made.
+Independent protocol review, compatible-host TSan, and controlled long-run
+benchmarking remain promotion requirements.
+
+The installed library and external consumer pass with both backends.
+ASan/UBSan's ten groups pass outside the sandbox with default leak detection.
+TSan's hazard group passed once; a full clean suite remains unavailable because
+other executions fail at startup with unexpected memory mappings. An earlier
+operational run reported unlock warnings on the timed-mutex path: this local
+libtsan lacks interception for the `pthread_mutex_clocklock` used by libstdc++.
+Timed management operations now use ordinary mutex try-lock polling instead.
+The subsequent operational reruns failed at runtime startup, so this change
+does not establish a clean TSan operational result.

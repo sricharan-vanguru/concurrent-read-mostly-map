@@ -22,9 +22,10 @@ finishes.
 
 This does **not** promise that `shared_ptr` reference-count operations are
 lock-free. Its purpose is a portable, memory-safe reference implementation.
-An opt-in epoch/RCU implementation will use lightweight read guards and
-reclaim retired snapshots only after a grace period. It will ship only after it
-passes the same API, safety, and benchmark suite.
+An opt-in experimental hazard-pointer backend uses registered read guards and
+reclaims replaced snapshots after checking that no guard protects them.
+See [protocol and lifecycle](docs/hazard-reclamation.md) for ordering, ownership,
+progress guarantees, and remaining validation work.
 
 ## Planned shape
 
@@ -51,6 +52,8 @@ metrics, observer events, and deadline close/drain management. See
 Phase 5 adds standalone throughput/latency and snapshot-cost benchmarks.
 See [benchmark methodology](benchmarks/README.md) for workload controls and
 measurement boundaries.
+Phase 6 adds the experimental guarded backend and hazard benchmark adapter;
+shared ownership remains the default.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 

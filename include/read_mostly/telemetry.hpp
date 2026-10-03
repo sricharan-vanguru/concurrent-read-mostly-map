@@ -13,6 +13,7 @@ struct UpdateEvent {
     std::uint64_t elapsed_nanoseconds;
 };
 using UpdateObserver = void (*)(const UpdateEvent &, void *) noexcept;
+enum class PublicationBackend { shared_ownership, experimental_hazard };
 
 struct MapOptions {
     // Includes old current + candidate overlap, not allocator overhead.
@@ -22,8 +23,11 @@ struct MapOptions {
     bool collect_update_metrics = false;
     UpdateObserver observer = nullptr;
     void *observer_context = nullptr;
+    PublicationBackend backend = PublicationBackend::shared_ownership;
 };
 struct MapStatistics {
+    bool hazard_backend = false;
+    std::size_t hazard_retired_wrappers = 0;
     bool retention_tracking_enabled = false;
     bool update_metrics_enabled = false;
     bool closed = false;

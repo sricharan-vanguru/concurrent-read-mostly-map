@@ -69,6 +69,11 @@ template <class Mutex> class LockedTable {
     std::unordered_map<std::string, std::string> entries_;
 
   public:
+    auto make_reader() {
+        return [this](const auto &keys, std::size_t start, std::size_t count) {
+            return read(keys, start, count);
+        };
+    }
     explicit LockedTable(const std::vector<read_mostly::ReadMostlyMap::Entry> &entries) {
         for (const auto &[key, value] : entries) {
             entries_.emplace(key, value);
@@ -98,10 +103,19 @@ template <class Mutex> class LockedTable {
     }
 };
 class CowTable {
+  protected:
     read_mostly::ReadMostlyMap map_;
+    static read_mostly::MapOptions options(read_mostly::PublicationBackend backend) {
+        read_mostly::MapOptions value;
+        value.backend = backend;
+        return value;
+    }
 
   public:
-    explicit CowTable(const std::vector<read_mostly::ReadMostlyMap::Entry> &entries) {
+    explicit CowTable(
+        const std::vector<read_mostly::ReadMostlyMap::Entry> &entries,
+        read_mostly::PublicationBackend backend = read_mostly::PublicationBackend::shared_ownership)
+        : map_({}, options(backend)) {
         (void)map_.replace_all(entries);
     }
     void write(const std::string &key, const std::string &value) {
@@ -123,6 +137,32 @@ class CowTable {
                 value->size() + (value->empty() ? 0 : static_cast<unsigned char>((*value)[0]));
         }
         return checksum;
+    }
+    auto make_reader() {
+        return [this](const auto &keys, std::size_t start, std::size_t count) {
+            return read(keys, start, count);
+        };
+    }
+};
+class HazardTable : public CowTable {
+  public:
+    explicit HazardTable(const std::vector<read_mostly::ReadMostlyMap::Entry> &entries)
+        : CowTable(entries, read_mostly::PublicationBackend::experimental_hazard) {}
+    auto make_reader() {
+        return [reader = map_.register_reader()](const auto &keys, std::size_t start,
+                                                 std::size_t count) {
+            const auto guard = reader.acquire();
+            std::uint64_t checksum = 0;
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto *value = guard.find(keys[(start + index) % keys.size()]);
+                if (!value) {
+                    throw std::runtime_error("missing hazard benchmark key");
+                }
+                checksum +=
+                    value->size() + (value->empty() ? 0 : static_cast<unsigned char>((*value)[0]));
+            }
+            return checksum;
+        };
     }
 };
 std::uint64_t percentile(std::vector<std::uint64_t> &samples, std::size_t percent) {
@@ -148,6 +188,12 @@ void run(std::string_view name, const Config &config,
         std::exception_ptr error;
     };
     std::vector<Result> results(config.threads);
+    using Reader = decltype(table.make_reader());
+    std::vector<Reader> registrations;
+    registrations.reserve(config.threads);
+    for (std::size_t index = 0; index < config.threads; ++index) {
+        registrations.push_back(table.make_reader());
+    }
     for (auto &result : results) {
         result.read_ns.reserve(config.iterations / 64 + 1);
         result.write_ns.reserve(config.iterations);
@@ -176,7 +222,7 @@ void run(std::string_view name, const Config &config,
                             table.write(keys[key], value);
                             ++result.writes;
                         } else {
-                            result.checksum += table.read(keys, key, config.batch);
+                            result.checksum += registrations[thread](keys, key, config.batch);
                             result.reads += config.batch;
                         }
                         if (timed) {
@@ -252,8 +298,8 @@ int main(int argc, char **argv) {
                      "write_p50_ns,write_p95_ns,write_p99_ns,read_samples,write_samples,checksum\n";
         for (std::size_t repeat = 0; repeat < config.repeats; ++repeat) {
             // Rotate order to reduce systematic first-mode bias.
-            for (std::size_t mode = 0; mode < 3; ++mode) {
-                switch ((mode + repeat) % 3) {
+            for (std::size_t mode = 0; mode < 4; ++mode) {
+                switch ((mode + repeat) % 4) {
                 case 0:
                     run<LockedTable<std::mutex>>("mutex", config, entries, keys, repeat);
                     break;
@@ -261,8 +307,11 @@ int main(int argc, char **argv) {
                     run<LockedTable<std::shared_mutex>>("shared_mutex", config, entries, keys,
                                                         repeat);
                     break;
-                default:
+                case 2:
                     run<CowTable>("cow", config, entries, keys, repeat);
+                    break;
+                default:
+                    run<HazardTable>("hazard", config, entries, keys, repeat);
                     break;
                 }
             }

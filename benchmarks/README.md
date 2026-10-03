@@ -12,9 +12,10 @@ ctest --preset benchmarks
 
 ## Throughput and latency
 
-Three compiled adapters run the same fixed-size lookup/update workload:
+Four compiled adapters run the same fixed-size lookup/update workload:
 mutex + mutable unordered_map, shared_mutex + mutable unordered_map, and
-ReadMostlyMap. All read batches hold one lock or snapshot for their entire
+ReadMostlyMap, and the experimental hazard backend with one pre-registered
+reader per worker. All read batches hold one lock, snapshot, or guard for their entire
 batch. The COW adapter includes transaction construction and publication in
 write timing; baseline writes mutate in place and provide no snapshot versions.
 These are practical architecture comparisons, not identical internal operations.
@@ -91,4 +92,6 @@ Logical payload and requested allocation bytes are different measures.
 Use results to identify ownership contention, batching benefit, and O(n)
 write-copy cost before evaluating sorted storage, PMR, or advanced reclamation.
 No container/allocator change is selected from smoke measurements.
-RCU/hazard comparisons will be added only when that backend exists.
+Hazard comparisons now use the same workload and include writer collection
+costs. Registered guard setup is outside timing; ephemeral-registration
+convenience APIs are not used for timed hazard reads.

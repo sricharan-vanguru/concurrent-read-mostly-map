@@ -3,6 +3,8 @@
 ReadMostlyMap accepts SnapshotLimits plus MapOptions. Defaults disable
 retention tracking, counters, timing, and callbacks. Normal reads have no
 telemetry counters or registry accesses.
+For the experimental hazard backend, guard registration and reclamation have
+separate costs documented in hazard-reclamation.md.
 
 ```cpp
 read_mostly::MapOptions options;
@@ -57,7 +59,8 @@ noexcept callback terminates the process.
 
 ## Close and drain
 
-close_until waits for the writer mutex until a steady-clock deadline. It does
+close_until polls writer try_lock until a steady-clock deadline, sleeping at
+most 1ms between attempts. It does
 not interrupt commits. False leaves state unchanged; true closes idempotently.
 Reads remain available.
 
