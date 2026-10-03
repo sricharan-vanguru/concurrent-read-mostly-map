@@ -4,6 +4,7 @@ project(ConcurrentReadMostlyMap VERSION 0.1.0 LANGUAGES CXX)
 
 option(READ_MOSTLY_BUILD_TESTS "Build tests" ON)
 option(READ_MOSTLY_BUILD_BENCHMARKS "Build standalone benchmarks" OFF)
+option(READ_MOSTLY_BUILD_EXAMPLES "Build integration examples" ON)
 
 option(READ_MOSTLY_WARNINGS_AS_ERRORS "Treat library and test warnings as errors" ON)
 option(READ_MOSTLY_ASAN_UBSAN "Enable address and undefined behavior sanitizers" OFF)
@@ -76,4 +77,8 @@ endif()
 
 if(READ_MOSTLY_BUILD_BENCHMARKS)
     add_subdirectory(benchmarks)
+endif()
+
+if(READ_MOSTLY_BUILD_EXAMPLES OR READ_MOSTLY_BUILD_TESTS)
+    add_subdirectory(examples)
 endif()

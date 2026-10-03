@@ -54,6 +54,10 @@ See [benchmark methodology](benchmarks/README.md) for workload controls and
 measurement boundaries.
 Phase 6 adds the experimental guarded backend and hazard benchmark adapter;
 shared ownership remains the default.
+Phase 7 starts integration examples, a separate exact-path routing adapter,
+multi-seed model tests, and nightly stress/benchmark artifacts. See
+[integration](docs/integration.md) and the open
+[release gates](docs/release-checklist.md); this is not a production release.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 

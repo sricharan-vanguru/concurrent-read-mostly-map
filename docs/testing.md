@@ -159,3 +159,18 @@ libtsan lacks interception for the `pthread_mutex_clocklock` used by libstdc++.
 Timed management operations now use ordinary mutex try-lock polling instead.
 The subsequent operational reruns failed at runtime startup, so this change
 does not establish a clean TSan operational result.
+
+## Phase 7 initial verification — 2026-10-03
+
+Debug passes nine groups. Release benchmark and ASan/UBSan builds pass all
+thirteen groups, including both runnable examples and the integration model.
+ASan/UBSan runs outside the sandbox with default leak detection. Installed
+package/external consumer, format and diff checks pass. Release correctness,
+hazard and integration groups also pass ten repetitions each.
+
+Routing tests cover exact matching, missing routes, conflicts, duplicate/input
+rejection without publication, retained views and empty reload. Model streams
+cover both backends with sixteen fixed seeds each, 250 steps per seed.
+Nightly CI is configured but not executed for these uncommitted changes.
+Phase 6's full TSan limitation remains unresolved; no production release or
+coverage-guided fuzzing result is claimed.

@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y ninja-build clang-format clang-tidy
-      - run: find include src tests benchmarks -type f \( -name '*.hpp' -o -name '*.cpp' \) -exec clang-format --dry-run --Werror {} +
+      - run: find include src tests benchmarks examples -type f \( -name '*.hpp' -o -name '*.cpp' \) -exec clang-format --dry-run --Werror {} +
       - run: cmake --preset debug -DCMAKE_CXX_CLANG_TIDY=clang-tidy -DREAD_MOSTLY_BUILD_BENCHMARKS=ON
       - run: cmake --build --preset debug
       - run: cmake --install build/debug --prefix "$RUNNER_TEMP/read-mostly-install"

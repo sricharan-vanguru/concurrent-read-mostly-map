@@ -1,0 +1,46 @@
+name: Nightly stress and benchmark artifacts
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [release, asan-ubsan, tsan]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake --preset ${{ matrix.preset }}
+      - run: cmake --build --preset ${{ matrix.preset }}
+      - run: ctest --preset ${{ matrix.preset }} --repeat until-fail:30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stress-${{ matrix.preset }}-${{ github.sha }}
+          path: build/${{ matrix.preset }}/Testing/Temporary/
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake --preset benchmarks && cmake --build --preset benchmarks
+      # Hosted runners provide trend artifacts, not stable regression gates.
+      - run: ./build/benchmarks/benchmarks/read_mostly_benchmark > benchmark.txt
+      - run: ./build/benchmarks/benchmarks/read_mostly_benchmark --write-permille 1 --batch 4 > benchmark-mixed.txt
+      - run: lscpu > machine.txt
+      - run: git rev-parse HEAD > revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ github.sha }}
+          path: |
+            benchmark.txt
+            benchmark-mixed.txt
+            machine.txt
+            revision.txt
