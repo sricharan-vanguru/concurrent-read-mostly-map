@@ -51,7 +51,9 @@ The SC schedule test enumerates reader/writer event orders and checks the
 active-guard invariant. It is a simplified ordering model, not a full C++
 memory-model verifier. Stress, sanitizer, and code review supplement this
 argument; they do not prove all possible executions or production readiness.
-Independent protocol review and compatible-host TSan validation remain open.
+Independent protocol review remains open. Local Clang TSan now passes all
+applicable groups, including three repeated runs; remote validation of the
+updated code is still required. See [verification](testing.md) for exclusions.
 
 ## Registration and lifetime
 

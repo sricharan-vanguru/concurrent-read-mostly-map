@@ -8,7 +8,8 @@ int main() {
     if (table.reload(routes, 0).status != read_mostly::CommitStatus::committed)
         return 1;
     const auto request = table.acquire();
-    if (request.resolve("/checkout") != "payments" || request.resolve("/missing"))
+    const auto destination = request.resolve("/checkout");
+    if (!destination || *destination != "payments" || request.resolve("/missing"))
         return 1;
-    std::cout << "Exact route /checkout -> " << *request.resolve("/checkout") << '\n';
+    std::cout << "Exact route /checkout -> " << *destination << '\n';
 }

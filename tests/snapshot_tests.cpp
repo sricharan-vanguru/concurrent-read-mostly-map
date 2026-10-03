@@ -57,9 +57,12 @@ int main() {
         copied.clear();
         check(builder.build(empty, copied).size() == 0 && transaction.size() == 1);
         auto moved = std::move(copied);
+        // Contract test: moved-from transactions are empty and reusable.
+        // NOLINTBEGIN(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
         check(copied.size() == 0 && moved.size() == 2);
         copied.insert_or_assign("reuse", "yes");
         check(builder.build(empty, copied).contains("reuse"));
+        // NOLINTEND(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
         UpdateTransaction binary;
         binary.insert_or_assign(std::string("a\0b", 3), std::string("v\0x", 3));
         const auto binary_snapshot = builder.build(empty, binary);

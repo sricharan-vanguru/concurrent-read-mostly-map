@@ -6,10 +6,15 @@
   shutdown contracts documented; hazard backend clearly experimental.
 - [x] Nightly repeated tests and benchmark artifact workflow configured.
 - [ ] Verify remote CI/nightly results on both compilers and compatible TSan hosts.
+- [x] Local Clang TSan applicable suite passes (allocation interceptor test
+  belongs to ordinary/ASan builds).
 - [ ] Independently review hazard protection, address reuse, slot registration,
   exception boundaries, and final-domain destruction on a reader thread.
-- [ ] Add coverage-guided fuzzing and archive minimized failures.
-- [ ] Choose license and document stable API/deprecation policy.
+- [x] Instrumented coverage-guided fuzzing, replay and CI artifact retention;
+  documented minimization of real failures (none fabricated).
+- [x] Future stable API/deprecation policy and local distribution audit.
+- [x] MIT license selected with owner authorization; packaged with copyright notice.
+- [x] Metadata-aware, noise-rejecting throughput gate and fixture tests.
 - [ ] Establish dedicated-hardware benchmark baselines and noise-tolerant gates.
 - [ ] Audit platform coverage, dependencies and distribution contents; choose
   release version/tag only after review. No release tag is created by this phase.
@@ -26,3 +31,10 @@ comparison. They are not performance regression gates: shared runners, CPU
 frequency and scheduling noise preclude reliable fixed percentage thresholds.
 Collect controlled measurements before setting thresholds. Scheduling a
 workflow is not evidence that it has executed successfully.
+
+The initial local Clang libFuzzer/ASan/UBSan campaign completed 26,964 runs
+in 61 seconds without failures; corpus remains under ignored build outputs.
+See [fuzzing](fuzzing.md), [compatibility](compatibility.md),
+[audit](release-audit.md) and [performance gate](../benchmarks/README.md).
+These additions do not close independent review, dedicated-host baseline,
+or remote CI verification gates. Licensing is now resolved by selecting MIT.

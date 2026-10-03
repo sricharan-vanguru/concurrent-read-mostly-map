@@ -6,23 +6,41 @@ on:
 permissions:
   contents: read
 jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - run: cmake -S . -B build/fuzz -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DREAD_MOSTLY_BUILD_FUZZER=ON -DREAD_MOSTLY_BUILD_TESTS=OFF -DREAD_MOSTLY_BUILD_EXAMPLES=OFF
+      - run: cmake --build build/fuzz
+      - run: mkdir -p build/fuzz/corpus build/fuzz/artifacts
+      - run: ./build/fuzz/map_fuzzer build/fuzz/corpus -max_total_time=300 -max_len=2049 -artifact_prefix=build/fuzz/artifacts/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-fuzz-${{ github.run_id }}
+          path: |
+            build/fuzz/corpus/
+            build/fuzz/artifacts/
   stress:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        compiler: [g++, clang++]
         preset: [release, asan-ubsan, tsan]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build
-      - run: cmake --preset ${{ matrix.preset }}
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - run: cmake --preset ${{ matrix.preset }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
       - run: cmake --build --preset ${{ matrix.preset }}
       - run: ctest --preset ${{ matrix.preset }} --repeat until-fail:30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stress-${{ matrix.preset }}-${{ github.sha }}
+          name: stress-${{ matrix.compiler }}-${{ matrix.preset }}-${{ github.sha }}
           path: build/${{ matrix.preset }}/Testing/Temporary/
   benchmark:
     runs-on: ubuntu-latest

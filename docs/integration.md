@@ -52,5 +52,7 @@ compatibility, not ABI identity. Private implementation types reduce coupling
 but do not by themselves guarantee ABI compatibility. Experimental APIs may
 change or be removed. A stable release must first define its deprecation policy.
 
-No license has been selected yet; public availability is not a redistribution
-license. License selection is an owner decision and a release gate.
+The project is licensed under [MIT](../LICENSE). Reuse, modification and
+commercial distribution are permitted; preserve the copyright and permission
+notice with copies or substantial portions. The license provides no warranty.
+See the [versioning/deprecation policy](compatibility.md) for future stable releases.

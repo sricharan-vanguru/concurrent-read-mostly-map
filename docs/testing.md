@@ -174,3 +174,33 @@ cover both backends with sixteen fixed seeds each, 250 steps per seed.
 Nightly CI is configured but not executed for these uncommitted changes.
 Phase 6's full TSan limitation remains unresolved; no production release or
 coverage-guided fuzzing result is claimed.
+
+## Release hardening verification — 2026-10-03
+
+GCC Debug passes eleven groups; GCC Release benchmark and ASan/UBSan builds
+pass fifteen. Clang 18 with clang-tidy (analyzer/bugprone warnings as errors)
+builds the library, tests, examples and benchmarks and passes fifteen groups.
+GCC and Clang installed external consumers pass. Clang's package exports the
+probed atomic runtime dependency, fixing prior GitHub link failures.
+
+Clang 18 TSan passes all ten applicable groups and repeats each three times
+without warnings/failures. Clang TSan has strong new/delete interceptors that
+conflict with the allocation-failure executable's overrides; this specific
+test is excluded from that runtime and still runs in GCC/Clang ordinary and
+GCC ASan builds. Allocation-profile benchmarks require a separate build.
+GCC TSan's previously recorded startup mapping limitation is not suppressed.
+
+Clang libFuzzer instruments the complete library and oracle with ASan/UBSan.
+A local empty-corpus campaign completed 26,964 runs in 61 seconds without a
+crash, abort or sanitizer report, producing 301 corpus entries. Temporary
+tool extraction lacked an external symbolizer (warning); no sanitizer
+finding was hidden or suppressed. Replay exercises binary keys/values, ordered
+operations, replacement duplicates, conflicts, close and retained views.
+
+Synthetic benchmark-gate tests pass. A short pinned capture is rejected as
+unstable, as intended; it is not an approved performance baseline. Binary and
+source CPack TGZs pass the contents audit without Git/build/local roadmap data.
+GitHub's existing fd545b5 run was inspected and failed; these local fixes have
+not been pushed or verified remotely. Independent hazard review, remote checks
+and dedicated-hardware performance approval remain open. MIT was subsequently
+selected with owner authorization and added to source/binary package checks.

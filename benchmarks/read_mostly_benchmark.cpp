@@ -64,15 +64,17 @@ Config parse(int argc, char **argv) {
     }
     return result;
 }
+struct ReadBatch {
+    std::size_t start;
+    std::size_t count;
+};
 template <class Mutex> class LockedTable {
     Mutex mutex_;
     std::unordered_map<std::string, std::string> entries_;
 
   public:
     auto make_reader() {
-        return [this](const auto &keys, std::size_t start, std::size_t count) {
-            return read(keys, start, count);
-        };
+        return [this](const auto &keys, ReadBatch batch) { return read(keys, batch); };
     }
     explicit LockedTable(const std::vector<read_mostly::ReadMostlyMap::Entry> &entries) {
         for (const auto &[key, value] : entries) {
@@ -83,11 +85,11 @@ template <class Mutex> class LockedTable {
         const std::lock_guard lock(mutex_);
         entries_.insert_or_assign(key, value);
     }
-    std::uint64_t read(const std::vector<std::string> &keys, std::size_t start, std::size_t count) {
+    std::uint64_t read(const std::vector<std::string> &keys, ReadBatch batch) {
         const auto lookup = [&] {
             std::uint64_t checksum = 0;
-            for (std::size_t index = 0; index < count; ++index) {
-                const auto &value = entries_.at(keys[(start + index) % keys.size()]);
+            for (std::size_t index = 0; index < batch.count; ++index) {
+                const auto &value = entries_.at(keys[(batch.start + index) % keys.size()]);
                 checksum +=
                     value.size() + (value.empty() ? 0 : static_cast<unsigned char>(value[0]));
             }
@@ -125,11 +127,11 @@ class CowTable {
             throw std::runtime_error("benchmark update rejected");
         }
     }
-    std::uint64_t read(const std::vector<std::string> &keys, std::size_t start, std::size_t count) {
+    std::uint64_t read(const std::vector<std::string> &keys, ReadBatch batch) {
         const auto snapshot = map_.acquire_snapshot();
         std::uint64_t checksum = 0;
-        for (std::size_t index = 0; index < count; ++index) {
-            const auto *value = snapshot.find(keys[(start + index) % keys.size()]);
+        for (std::size_t index = 0; index < batch.count; ++index) {
+            const auto *value = snapshot.find(keys[(batch.start + index) % keys.size()]);
             if (!value) {
                 throw std::runtime_error("missing benchmark key");
             }
@@ -139,9 +141,7 @@ class CowTable {
         return checksum;
     }
     auto make_reader() {
-        return [this](const auto &keys, std::size_t start, std::size_t count) {
-            return read(keys, start, count);
-        };
+        return [this](const auto &keys, ReadBatch batch) { return read(keys, batch); };
     }
 };
 class HazardTable : public CowTable {
@@ -149,12 +149,11 @@ class HazardTable : public CowTable {
     explicit HazardTable(const std::vector<read_mostly::ReadMostlyMap::Entry> &entries)
         : CowTable(entries, read_mostly::PublicationBackend::experimental_hazard) {}
     auto make_reader() {
-        return [reader = map_.register_reader()](const auto &keys, std::size_t start,
-                                                 std::size_t count) {
+        return [reader = map_.register_reader()](const auto &keys, ReadBatch batch) {
             const auto guard = reader.acquire();
             std::uint64_t checksum = 0;
-            for (std::size_t index = 0; index < count; ++index) {
-                const auto *value = guard.find(keys[(start + index) % keys.size()]);
+            for (std::size_t index = 0; index < batch.count; ++index) {
+                const auto *value = guard.find(keys[(batch.start + index) % keys.size()]);
                 if (!value) {
                     throw std::runtime_error("missing hazard benchmark key");
                 }
@@ -178,7 +177,7 @@ void run(std::string_view name, const Config &config,
          const std::vector<std::string> &keys, std::size_t repeat) {
     Table table(entries);
     for (std::size_t index = 0; index < 256; ++index) {
-        (void)table.read(keys, index % keys.size(), 1);
+        (void)table.read(keys, {index % keys.size(), 1});
     }
     const std::string values[]{std::string(config.value_bytes, 'a'),
                                std::string(config.value_bytes, 'b')};
@@ -222,7 +221,7 @@ void run(std::string_view name, const Config &config,
                             table.write(keys[key], value);
                             ++result.writes;
                         } else {
-                            result.checksum += registrations[thread](keys, key, config.batch);
+                            result.checksum += registrations[thread](keys, {key, config.batch});
                             result.reads += config.batch;
                         }
                         if (timed) {

@@ -10,6 +10,12 @@ read_mostly_warnings(map_tests)
 add_test(NAME map_tests COMMAND map_tests)
 set_tests_properties(map_tests PROPERTIES TIMEOUT 60)
 foreach(test_name allocation_failure_tests correctness_tests operational_tests hazard_tests)
+    # Clang TSan owns strong new/delete interceptors: the isolated allocation
+    # override test belongs to ordinary and ASan builds, not this runtime.
+    if(READ_MOSTLY_TSAN AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+       test_name STREQUAL "allocation_failure_tests")
+        continue()
+    endif()
     add_executable(${test_name} ${test_name}.cpp)
     target_link_libraries(${test_name} PRIVATE read_mostly::map)
     target_include_directories(${test_name} PRIVATE ${PROJECT_SOURCE_DIR}/src)
@@ -17,3 +23,14 @@ foreach(test_name allocation_failure_tests correctness_tests operational_tests h
     add_test(NAME ${test_name} COMMAND ${test_name})
     set_tests_properties(${test_name} PROPERTIES TIMEOUT 60)
 endforeach()
+add_executable(fuzz_replay fuzz_model.cpp)
+target_link_libraries(fuzz_replay PRIVATE read_mostly::map)
+read_mostly_warnings(fuzz_replay)
+add_test(NAME fuzz_replay COMMAND fuzz_replay)
+set_tests_properties(fuzz_replay PROPERTIES TIMEOUT 60)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME benchmark_gate_tests COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/benchmark_gate_tests.py)
+    set_tests_properties(benchmark_gate_tests PROPERTIES TIMEOUT 30)
+endif()

@@ -1,5 +1,7 @@
 # Concurrent Read-Mostly Map
 
+Licensed under the [MIT License](LICENSE) (SPDX: `MIT`).
+
 A production-minded C++20 library for configuration maps, feature-flag tables,
 and routing tables with many concurrent readers and rare writes. The intended
 public contract is:
@@ -58,6 +60,10 @@ Phase 7 starts integration examples, a separate exact-path routing adapter,
 multi-seed model tests, and nightly stress/benchmark artifacts. See
 [integration](docs/integration.md) and the open
 [release gates](docs/release-checklist.md); this is not a production release.
+Release hardening adds [coverage-guided fuzzing](docs/fuzzing.md), a
+metadata-aware throughput comparison tool, [compatibility policy](docs/compatibility.md)
+and a [local release audit](docs/release-audit.md). CPack can build pre-stable
+archives; independent review and release approval remain open.
 See [API contracts](docs/api-contract.md), [publication](docs/publication.md), and
 [verification](docs/testing.md).
 

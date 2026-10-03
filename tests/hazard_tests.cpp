@@ -79,6 +79,8 @@ int main() {
         auto moved_reader = std::move(reader);
         bool moved_rejected = false;
         try {
+            // Contract test intentionally uses the moved-from registration.
+            // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
             (void)reader.acquire();
         } catch (const std::logic_error &) {
             moved_rejected = true;
@@ -89,6 +91,8 @@ int main() {
             auto moved_guard = std::move(guard);
             bool moved_guard_rejected = false;
             try {
+                // Contract test intentionally uses the moved-from guard.
+                // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
                 (void)guard.version();
             } catch (const std::logic_error &) {
                 moved_guard_rejected = true;

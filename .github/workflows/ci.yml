@@ -4,6 +4,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         compiler: [g++, clang++]
         preset: [debug, release, asan-ubsan, tsan]
@@ -24,6 +25,8 @@ jobs:
       - run: cmake --install build/debug --prefix "$RUNNER_TEMP/read-mostly-install"
       - run: cmake -S tests/package_consumer -B build/consumer -G Ninja -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/read-mostly-install"
       - run: cmake --build build/consumer && ./build/consumer/consumer
+      - run: cpack --config build/debug/CPackConfig.cmake -B build/packages && cpack --config build/debug/CPackSourceConfig.cmake -B build/packages
+      - run: python3 tools/check_distribution.py --source build/packages/ConcurrentReadMostlyMap-0.1.0-Source.tar.gz --binary build/packages/ConcurrentReadMostlyMap-0.1.0-Linux.tar.gz
   benchmark-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -32,3 +35,20 @@ jobs:
       - run: cmake --preset benchmarks
       - run: cmake --build --preset benchmarks
       - run: ctest --preset benchmarks
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - run: cmake -S . -B build/fuzz -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DREAD_MOSTLY_BUILD_FUZZER=ON -DREAD_MOSTLY_BUILD_TESTS=OFF -DREAD_MOSTLY_BUILD_EXAMPLES=OFF
+      - run: cmake --build build/fuzz
+      - run: mkdir -p build/fuzz/corpus build/fuzz/artifacts
+      - run: ./build/fuzz/map_fuzzer build/fuzz/corpus -max_total_time=60 -max_len=2049 -artifact_prefix=build/fuzz/artifacts/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-corpus-${{ github.sha }}
+          path: |
+            build/fuzz/corpus/
+            build/fuzz/artifacts/

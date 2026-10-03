@@ -95,3 +95,33 @@ No container/allocator change is selected from smoke measurements.
 Hazard comparisons now use the same workload and include writer collection
 costs. Registered guard setup is outside timing; ephemeral-registration
 convenience APIs are not used for timed hazard reads.
+
+## Controlled regression gate
+
+`tools/capture_benchmark.py` pins the child workload and saves CSV plus CPU,
+OS, compiler, declared build flags, affinity and frequency-governor metadata.
+Use at least five repeats, long runs, identical binaries/build configurations
+apart from the intended change, idle dedicated cores, and stable thermal state.
+The tool does not change the system governor or prove that the machine is idle.
+Build flags must be verified against the build command, not invented.
+
+```sh
+python3 tools/capture_benchmark.py --executable build/benchmarks/benchmarks/read_mostly_benchmark \
+  --output build/perf-base --cpus 0,1,2,3 --build-flags='-O3 -DNDEBUG' \
+  -- --iterations 100000 --repeats 7 --write-permille 1
+# Rebuild the candidate, then capture into a new directory with identical controls.
+python3 tools/compare_benchmarks.py \
+  --baseline build/perf-base/benchmark.csv --candidate build/perf-next/benchmark.csv \
+  --baseline-env build/perf-base/environment.json \
+  --candidate-env build/perf-next/environment.json
+```
+
+Choose CPUs allowed on your host. The comparison requires matching environment
+fields/workloads, unique repeats, finite positive throughput and sufficient
+samples. A coefficient of variation above 10% yields `INCOMPARABLE` (exit 2).
+Stable median throughput drops above the configurable 5% tolerance fail (exit
+1); otherwise exit 0. Synthetic unit tests check these decisions. This is a
+practical noise gate, not statistical significance testing or a latency gate.
+Tune thresholds only using controlled baseline variability; hosted nightly
+artifacts do not establish an approved baseline. Store baseline/candidate
+revisions, raw CSV and environment files together for review.
