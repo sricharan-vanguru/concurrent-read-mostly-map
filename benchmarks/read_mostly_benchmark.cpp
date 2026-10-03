@@ -18,6 +18,7 @@ struct Config {
     std::size_t threads = 4, entries = 1024, iterations = 10000;
     std::size_t key_bytes = 16, value_bytes = 32, batch = 1, write_permille = 0, repeats = 3;
     bool burst = false;
+    std::size_t hot_permille = 0;
 };
 std::size_t number(std::string_view argument) {
     std::size_t value = 0;
@@ -51,6 +52,8 @@ Config parse(int argc, char **argv) {
             result.write_permille = value;
         } else if (option == "--repeats") {
             result.repeats = value;
+        } else if (option == "--hot-permille") {
+            result.hot_permille = value;
         } else if (option == "--burst" && value <= 1) {
             result.burst = value != 0;
         } else {
@@ -59,7 +62,8 @@ Config parse(int argc, char **argv) {
     }
     if (!result.threads || result.threads > 256 || !result.entries || !result.iterations ||
         !result.batch || !result.repeats || result.write_permille > 1000 ||
-        result.iterations > 100000000 || result.batch > 1024 || result.repeats > 100) {
+        result.hot_permille > 1000 || result.iterations > 100000000 || result.batch > 1024 ||
+        result.repeats > 100) {
         throw std::invalid_argument("invalid workload bounds");
     }
     return result;
@@ -214,7 +218,12 @@ void run(std::string_view name, const Config &config,
                                                ? iteration % 1000 < config.write_permille
                                                : (iteration % 1000 * config.write_permille) % 1000 <
                                                      config.write_permille;
-                        const auto key = (iteration * 17 + thread * 31) % keys.size();
+                        auto key = (iteration * 17 + thread * 31) % keys.size();
+                        // Deterministic hot starting-key selection; writes stay uniform.
+                        // Batch lookups still traverse adjacent keys and can leave the set.
+                        if (!write && (iteration * 37 + thread * 13) % 1000 < config.hot_permille) {
+                            key %= std::max(std::size_t{1}, keys.size() / 100);
+                        }
                         const bool timed = write || iteration % 64 == 0;
                         const auto before = timed ? Clock::now() : Clock::time_point{};
                         if (write) {
@@ -270,7 +279,8 @@ void run(std::string_view name, const Config &config,
               << percentile(read_ns, 50) << ',' << percentile(read_ns, 95) << ','
               << percentile(read_ns, 99) << ',' << percentile(write_ns, 50) << ','
               << percentile(write_ns, 95) << ',' << percentile(write_ns, 99) << ','
-              << read_ns.size() << ',' << write_ns.size() << ',' << checksum << '\n';
+              << read_ns.size() << ',' << write_ns.size() << ',' << checksum << ','
+              << config.hot_permille << '\n';
 }
 int main(int argc, char **argv) {
     try {
@@ -294,7 +304,8 @@ int main(int argc, char **argv) {
         std::cout << "mode,repeat,threads,entries,key_bytes,value_bytes,batch,write_permille,burst,"
                      "reads,writes,"
                      "seconds,ops_per_second,read_p50_ns,read_p95_ns,read_p99_ns,"
-                     "write_p50_ns,write_p95_ns,write_p99_ns,read_samples,write_samples,checksum\n";
+                     "write_p50_ns,write_p95_ns,write_p99_ns,read_samples,write_samples,checksum,"
+                     "hot_permille\n";
         for (std::size_t repeat = 0; repeat < config.repeats; ++repeat) {
             // Rotate order to reduce systematic first-mode bias.
             for (std::size_t mode = 0; mode < 4; ++mode) {

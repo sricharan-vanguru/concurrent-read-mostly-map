@@ -29,7 +29,7 @@ defaults to shared ownership, unlimited logical limits and disabled telemetry.
 `Entry` is `pair<string, string>`. Replacement input is a `span<const Entry>`;
 caller storage must remain valid and unmodified through the call. An empty span
 publishes an empty table. Replacement's operation budget counts input pairs,
-not the internal clear; duplicate pairs still count as input operations.
+with no synthetic clear operation; duplicate pairs still count as input operations.
 
 ### CommitResult
 
@@ -102,6 +102,12 @@ against the new source. Do not mutate it while another thread reads/builds it.
 operations in order, validates the final candidate, and returns version
 `source.version() + 1`. Source and transaction are unchanged. It does not publish
 into a map. A stateless builder supports concurrent const builds with stable input.
+
+`build_replacement(source, entries)` constructs empty storage and inserts the input
+pairs directly. The source supplies only the version, not copied entries. The last
+duplicate value wins; final entry/payload limits apply after all assignments.
+Input pairs count toward the operation limit. Empty replacement is valid and
+advances the version. Both builder methods preserve their inputs on failure.
 
 | Limit | Counts | Default |
 |---|---|---|

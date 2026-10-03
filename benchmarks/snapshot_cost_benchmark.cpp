@@ -64,6 +64,11 @@ int main(int argc, char **argv) {
         }
         edit.insert_or_assign("key-0", std::string(value_bytes, 'b'));
         const auto source = builder.build(empty, seed);
+        UpdateTransaction legacy_replacement;
+        legacy_replacement.clear();
+        for (const auto &[key, value] : input) {
+            legacy_replacement.insert_or_assign(key, value);
+        }
         std::cout << "# ordinary allocation requests only; instrumentation changes timing\n";
         std::cout << "iteration,entries,value_bytes,build_ns,allocations,requested_bytes,last_"
                      "owner_release_ns\n";
@@ -86,6 +91,33 @@ int main(int argc, char **argv) {
                                                                         release_start)
                        .count()
                 << '\n';
+        }
+        // Compare candidate construction only. Input/transaction setup is outside
+        // counting and timing, so the legacy path's extra preparation is excluded.
+        std::cout << "# replacement candidate comparison: identical source and input\n";
+        std::cout << "replacement_mode,iteration,build_ns,allocations,requested_bytes\n";
+        for (std::size_t iteration = 0; iteration < repeats; ++iteration) {
+            for (std::size_t order = 0; order < 2; ++order) {
+                const bool direct = (iteration + order) % 2 == 0;
+                allocations = 0;
+                requested_bytes = 0;
+                counting = true;
+                const auto start = Clock::now();
+                const auto candidate = direct ? builder.build_replacement(source, input)
+                                              : builder.build(source, legacy_replacement);
+                const auto finish = Clock::now();
+                counting = false;
+                if (candidate.size() != source.size() ||
+                    candidate.payload_bytes() != source.payload_bytes() ||
+                    candidate.version() != source.version() + 1 ||
+                    candidate.find_copy("key-0") != source.find_copy("key-0")) {
+                    throw std::runtime_error("replacement comparison invariant failed");
+                }
+                std::cout
+                    << (direct ? "direct" : "copy_clear") << ',' << iteration << ','
+                    << std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count()
+                    << ',' << allocations << ',' << requested_bytes << '\n';
+            }
         }
         MapOptions options;
         options.track_retained_snapshots = true;

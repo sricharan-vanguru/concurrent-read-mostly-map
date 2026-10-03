@@ -75,8 +75,9 @@ After the result or exception is recorded, the writer mutex is released before
 the observer executes. Another writer may publish before that callback runs;
 callbacks can therefore arrive out of version order.
 
-`replace_all` currently uses the same copy/build path as a transaction and adds
-an internal clear before assignments. It is not a special zero-copy bulk loader.
+`replace_all` builds an empty candidate directly from the supplied entries,
+without copying the old table or constructing an intermediate transaction.
+It still copies input strings and uses the same validation and publication rules.
 
 ## 5. Experimental read and collection paths
 
@@ -112,7 +113,7 @@ name a pattern. The concrete API intentionally focuses on one table domain.
 | `Snapshot::find` | Average O(1) hash lookup; worst-case O(n); hash/compare key bytes |
 | Copy snapshot | Shared ownership bookkeeping, not full table copy |
 | Commit with k operations | Average O(n + k), plus string copies, validation and allocations |
-| `replace_all` | Current-table copy plus clearing/input assignments and validation |
+| `replace_all` | Input assignments and final-table validation; no old-table copy |
 | Default acquisition | Atomic wrapper ownership plus data ownership copy |
 | Hazard registration | Allocation and slot-registry mutex |
 | Guard acquisition | SC atomics, slot ownership; may retry under publication |

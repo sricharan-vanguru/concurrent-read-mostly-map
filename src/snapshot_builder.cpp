@@ -2,10 +2,28 @@
 #include "snapshot_data.hpp"
 #include "transaction_data.hpp"
 #include "version.hpp"
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
 namespace read_mostly {
+namespace {
+template <class Data> void validate(Data &replacement, SnapshotLimits limits) {
+    if (replacement.entries.size() > limits.max_entries) {
+        throw std::length_error("snapshot entry limit exceeded");
+    }
+    std::size_t bytes = 0;
+    for (const auto &[key, value] : replacement.entries) {
+        for (const auto length : {key.size(), value.size()}) {
+            if (length > limits.max_payload_bytes - bytes) {
+                throw std::length_error("snapshot payload limit exceeded");
+            }
+            bytes += length;
+        }
+    }
+    replacement.payload_bytes = bytes;
+}
+} // namespace
 SnapshotBuilder::SnapshotBuilder(SnapshotLimits limits) noexcept : limits_(limits) {}
 Snapshot SnapshotBuilder::build(const Snapshot &source,
                                 const UpdateTransaction &transaction) const {
@@ -30,20 +48,23 @@ Snapshot SnapshotBuilder::build(const Snapshot &source,
             }
         }
     }
-    if (replacement->entries.size() > limits_.max_entries) {
-        throw std::length_error("snapshot entry limit exceeded");
+    validate(*replacement, limits_);
+    replacement->version = candidate_version;
+    return Snapshot(std::move(replacement));
+}
+Snapshot SnapshotBuilder::build_replacement(
+    const Snapshot &source, std::span<const std::pair<std::string, std::string>> entries) const {
+    if (entries.size() > limits_.max_operations) {
+        throw std::length_error("replacement operation limit exceeded");
     }
-    std::size_t bytes = 0;
-    for (const auto &[key, value] : replacement->entries) {
-        // Subtraction-based checks avoid overflow in the running byte count.
-        for (const auto length : {key.size(), value.size()}) {
-            if (length > limits_.max_payload_bytes - bytes) {
-                throw std::length_error("snapshot payload limit exceeded");
-            }
-            bytes += length;
-        }
+    const auto candidate_version = detail::next_version(source.version());
+    auto replacement = std::make_shared<Snapshot::Data>();
+    // Duplicates count as operations, but not as unique entries.
+    replacement->entries.reserve(std::min(entries.size(), limits_.max_entries));
+    for (const auto &[key, value] : entries) {
+        replacement->entries.insert_or_assign(key, value);
     }
-    replacement->payload_bytes = bytes;
+    validate(*replacement, limits_);
     replacement->version = candidate_version;
     return Snapshot(std::move(replacement));
 }

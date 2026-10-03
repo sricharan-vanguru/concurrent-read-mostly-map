@@ -33,6 +33,7 @@ Options:
 | --write-permille | Writes per 1000 iterations | 0 |
 | --burst | 0: spaced writes; 1: contiguous writes each 1000-cycle | 0 |
 | --repeats | Independent tables/runs; adapter order rotates | 3 |
+| --hot-permille | Fraction of iteration positions selecting read-batch starts in the first 1% of keys (minimum one key) | 0 |
 
 0, 1, and 10 permille correspond to read-only, 99.9/0.1, and 99/1 workloads
 for batch=1 and complete 1000-iteration cycles. Batch>1 changes the fraction
@@ -40,6 +41,13 @@ of individual lookups vs writes; CSV records actual counts. Partial cycles
 can have a different ratio. All workers follow the same deterministic write
 schedule; simultaneous writer contention is intentional. Generated keys have
 uniform cyclic access, not a realistic skewed production distribution.
+
+`--hot-permille 900` enables deterministic hot-key traffic. Writes remain uniform;
+read starts target the hot subset at selected iteration positions. The actual
+fraction among reads depends on the write schedule, and batches can leave that
+subset. This is not random Zipf traffic or a production trace. CSV includes
+`hot_permille`; regression comparisons separate different settings (older files
+without this column are interpreted as zero).
 
 Table setup and 256 warm-up reads are outside timing. Worker input generation
 and readiness happen before the starting barrier. Wall time includes barrier
@@ -88,6 +96,39 @@ payload/version counts, then checks that releasing them clears the backlog.
 Logical payload and requested allocation bytes are different measures.
 
 ## Decisions
+
+The snapshot-cost executable also compares `direct` replacement construction
+against the previous `copy_clear` transaction path, rotating order each repeat.
+Both use identical source/input. Transaction preparation and destruction are
+outside the measured build interval; no concurrent publication is measured here.
+Allocation requests exclude allocator overhead and are not RSS measurements.
+This diagnostic provides evidence, not an approved hardware performance baseline.
+
+Read the replacement rows as follows:
+
+| Column | Meaning |
+|---|---|
+| `replacement_mode` | `direct`: empty candidate; `copy_clear`: copy old data, clear, then assign |
+| `iteration` | Repetition index; the two modes alternate execution order |
+| `build_ns` | Candidate construction and validation duration, not complete reload latency |
+| `allocations` | Ordinary `new`/`new[]` allocation request count during construction |
+| `requested_bytes` | Sum of requested bytes, not live memory, allocator overhead or RSS |
+
+The output contains separate CSV sections with different headers; it is not an
+input to the throughput regression comparator. Compare rows within the same
+section and retain all repetitions. See [testing evidence](../docs/testing.md)
+for the initial local observation and its limitations.
+
+```sh
+./build/benchmarks/benchmarks/snapshot_cost_benchmark 4096 128 31
+./build/benchmarks/benchmarks/read_mostly_benchmark --entries 4096 --hot-permille 900 --write-permille 1 --iterations 100000 --repeats 5
+```
+
+Use the same hot-key setting in baseline and candidate captures. The gate rejects
+different settings instead of interpreting a workload change as a speedup.
+This workload does not yet measure dedicated reload writers, long-held views
+under concurrent reload or reclamation-induced reader tail latency; those are
+follow-up experiments, not implemented guarantees.
 
 Use results to identify ownership contention, batching benefit, and O(n)
 write-copy cost before evaluating sorted storage, PMR, or advanced reclamation.

@@ -137,6 +137,55 @@ reload success. An empty span replaces the table with an empty table; a successf
 empty replacement still advances the version. The span's elements must stay
 valid and unmodified until the call returns.
 
+### What the optimized replacement does
+
+Unlike a patch transaction, replacement starts with empty candidate storage.
+It does not copy the old table, and it does not create an intermediate transaction.
+The writer still checks closed state and expected version first. It then copies
+input strings into the candidate, validates final limits, checks live-version
+budgets and publishes. This is **not zero-copy** and does not bypass safety checks.
+
+| Input | Result after a successful replacement |
+|---|---|
+| Key omitted from input | Key disappears from the new table |
+| Key repeated | Last input value wins |
+| Empty input | New table is empty; version still advances |
+| Existing reader holds old snapshot | Its old keys and values remain unchanged |
+
+Here is a complete example of replacement, duplicate handling and old-view lifetime:
+
+```cpp
+// runnable: bulk_replacement
+#include <read_mostly/read_mostly_map.hpp>
+#include <iostream>
+#include <vector>
+
+int main() {
+    read_mostly::ReadMostlyMap config;
+    const std::vector<read_mostly::ReadMostlyMap::Entry> initial{
+        {"mode", "safe"}, {"obsolete", "yes"}};
+    if (config.replace_all(initial, 0).status != read_mostly::CommitStatus::committed)
+        return 1;
+    const auto old = config.acquire_snapshot();
+    const std::vector<read_mostly::ReadMostlyMap::Entry> replacement{
+        {"mode", "safe"}, {"mode", "fast"}};
+    const auto result = config.replace_all(replacement, old.version());
+    if (result.status != read_mostly::CommitStatus::committed) return 1;
+    const auto current = config.acquire_snapshot();
+    if (old.find_copy("mode") != "safe" || !old.contains("obsolete") ||
+        current.find_copy("mode") != "fast" || current.contains("obsolete") ||
+        current.version() != 2) return 1;
+    std::cout << "old=safe, new=fast, version=2\n";
+}
+```
+
+Expected output: `old=safe, new=fast, version=2`.
+Operation limits count every input pair, including duplicates. Entry and payload
+limits count the final table; an overwritten value does not contribute to its
+final payload. Allocation or validation failure leaves the published version
+unchanged. For candidate-only construction without a map, use
+`SnapshotBuilder::build_replacement(source, entries)`; it does not publish.
+
 ## 6. Understand candidate limits and live-version budgets
 
 `SnapshotLimits` bounds a single candidate's final entries, final key/value bytes,

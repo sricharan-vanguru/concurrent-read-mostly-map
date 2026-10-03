@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <limits>
+#include <span>
+#include <utility>
 
 namespace read_mostly {
 struct SnapshotLimits {
@@ -20,6 +22,10 @@ class SnapshotBuilder final {
     explicit SnapshotBuilder(SnapshotLimits limits = {}) noexcept;
     [[nodiscard]] Snapshot build(const Snapshot &source,
                                  const UpdateTransaction &transaction) const;
+    // Builds from empty storage; duplicate keys use the last input value.
+    [[nodiscard]] Snapshot
+    build_replacement(const Snapshot &source,
+                      std::span<const std::pair<std::string, std::string>> entries) const;
 
   private:
     SnapshotLimits limits_;

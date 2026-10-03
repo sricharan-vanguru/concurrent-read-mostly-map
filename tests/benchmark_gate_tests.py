@@ -11,7 +11,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "tools" / "compare_benchmarks.py"
 
 
 class GateTests(unittest.TestCase):
-    def run_case(self, samples, *, mismatch=False, duplicate=False):
+    def run_case(self, samples, *, mismatch=False, duplicate=False, hot=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             environment = dict.fromkeys(
@@ -21,12 +21,15 @@ class GateTests(unittest.TestCase):
                 values = [100] * 5 if name == "base" else samples
                 with (root / f"{name}.csv").open("w", newline="", encoding="utf-8") as stream:
                     writer = csv.writer(stream)
-                    writer.writerow(("mode", "threads", "entries", "key_bytes", "value_bytes",
+                    header = ("mode", "threads", "entries", "key_bytes", "value_bytes",
                                      "batch", "write_permille", "burst", "reads", "writes",
-                                     "repeat", "ops_per_second"))
+                                     "repeat", "ops_per_second")
+                    writer.writerow(header + (("hot_permille",) if hot is not None else ()))
                     for repeat, value in enumerate(values):
-                        writer.writerow(("cow", 1, 16, 8, 8, 1, 0, 0, 1000, 0,
-                                         0 if duplicate else repeat, value))
+                        row = ("cow", 1, 16, 8, 8, 1, 0, 0, 1000, 0,
+                               0 if duplicate else repeat, value)
+                        writer.writerow(row + ((hot[0 if name == "base" else 1],)
+                                               if hot is not None else ()))
             if mismatch:
                 (root / "candidate.json").write_text("{}", encoding="utf-8")
             return subprocess.run([sys.executable, str(SCRIPT),
@@ -41,6 +44,10 @@ class GateTests(unittest.TestCase):
 
     def test_regression(self):
         self.assertEqual(self.run_case([90] * 5), 1)
+
+    def test_hot_workload(self):
+        self.assertEqual(self.run_case([100] * 5, hot=(900, 900)), 0)
+        self.assertEqual(self.run_case([100] * 5, hot=(0, 900)), 2)
 
     def test_unstable(self):
         self.assertEqual(self.run_case([50, 100, 150, 200, 250]), 2)

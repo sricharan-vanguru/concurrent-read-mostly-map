@@ -51,3 +51,7 @@ explicitly stated. Dotted arrows indicate optional tracking or a later action.
 Commands assume the repository root unless stated otherwise. Examples use
 explicit checks rather than `assert`, so checks remain active in Release builds.
 All successful updates—including empty batches—advance the version.
+
+The tutorial now includes a complete bulk-replacement example. The architecture
+and API guides distinguish direct replacement from copy-on-write patches;
+the benchmark guide explains hot-key workloads and replacement allocation costs.

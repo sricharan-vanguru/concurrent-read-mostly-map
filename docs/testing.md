@@ -225,3 +225,22 @@ source is sent to an external rendering service.
 Reproduce the documentation checks using [the contributing guide](contributing.md).
 Independent hazard review, scheduled-nightly verification, broader platform
 coverage and dedicated-hardware performance approval remain open.
+
+## Direct replacement and hot-key benchmarks — 2026-10-03
+
+Local GCC Debug passes 12 test groups; Release benchmark and ASan/UBSan builds
+pass 18 each, including the new hot-workload and invalid-option checks.
+ASan/UBSan ran outside the restricted sandbox with default leak detection.
+Replacement-builder tests cover duplicates, exact limits, empty input, embedded
+NUL bytes, version advancement and retained source data. Existing allocation
+failure sweeps and both-backend model tests also pass with the new path.
+Five synthetic regression-gate tests pass, including rejection of mismatched
+hot-key settings and compatibility with older uniform benchmark CSVs.
+
+A short local instrumented run (`4096 128 3`) recorded 8,194 ordinary allocation
+requests and 858,176 requested bytes per direct replacement candidate, versus
+16,386 requests and 1,687,376 bytes for copy-then-clear. This comparison excludes
+input/transaction preparation, publication, candidate destruction, allocator
+overhead and RSS. It is diagnostic evidence, not a dedicated-hardware baseline
+or an end-to-end latency claim. These changes have not been pushed or checked
+by remote CI.

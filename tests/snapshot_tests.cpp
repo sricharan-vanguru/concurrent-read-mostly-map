@@ -73,6 +73,21 @@ int main() {
         check(first.find_copy("mode") == "fast" && transaction.size() == 1);
         check(SnapshotBuilder({1, 8, 1}).build(empty, transaction).payload_bytes() == 8);
         check(builder.build(first, UpdateTransaction{}).version() == 2);
+        const std::vector<std::pair<std::string, std::string>> replacement{{"new", "discarded"},
+                                                                           {"new", "final"}};
+        const auto replaced = SnapshotBuilder({1, 8, 2}).build_replacement(first, replacement);
+        check(replaced.size() == 1 && replaced.find_copy("new") == "final");
+        check(replaced.version() == 2 && replaced.payload_bytes() == 8);
+        check(first.find_copy("mode") == "fast" && *retained_value == "fast");
+        check(builder.build_replacement(first, {}).size() == 0);
+        check(SnapshotBuilder({0, 0, 0}).build_replacement(first, {}).version() == 2);
+        rejects([&] { (void)SnapshotBuilder({1, 8, 1}).build_replacement(first, replacement); });
+        rejects([&] { (void)SnapshotBuilder({0, 8, 2}).build_replacement(first, replacement); });
+        rejects([&] { (void)SnapshotBuilder({1, 7, 2}).build_replacement(first, replacement); });
+        const std::vector<std::pair<std::string, std::string>> binary_replacement{
+            {std::string("a\0b", 3), std::string("v\0x", 3)}};
+        check(builder.build_replacement(first, binary_replacement)
+                  .find_copy(std::string_view("a\0b", 3)) == std::string("v\0x", 3));
         std::atomic<bool> correct{true};
         std::vector<std::jthread> readers;
         for (int index = 0; index < 8; ++index) {

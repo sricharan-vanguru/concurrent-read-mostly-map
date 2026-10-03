@@ -78,6 +78,11 @@ The routing example prints `Exact route /checkout -> payments`.
 
 ## 4. Link it from your own CMake project
 
+For a complete whole-table reload program, see the tutorial's
+[replacement example](tutorial.md#5-replace-the-entire-table). It demonstrates
+that omitted keys disappear from the new version while existing readers keep
+their old values.
+
 Save the complete program above as `main.cpp` in a separate directory. First
 install the library from its repository:
 

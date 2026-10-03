@@ -10,6 +10,11 @@ if(READ_MOSTLY_BUILD_TESTS)
     add_test(NAME benchmark_batch_smoke COMMAND read_mostly_benchmark --entries 32 --threads 2
         --iterations 1000 --batch 8 --write-permille 1 --burst 1 --repeats 1)
     add_test(NAME snapshot_cost_smoke COMMAND snapshot_cost_benchmark 32 32 3)
+    add_test(NAME benchmark_hot_smoke COMMAND read_mostly_benchmark --entries 128 --threads 2
+        --iterations 1000 --hot-permille 900 --write-permille 10 --repeats 1)
+    add_test(NAME benchmark_hot_invalid COMMAND read_mostly_benchmark --hot-permille 1001)
+    set_tests_properties(benchmark_hot_invalid PROPERTIES WILL_FAIL TRUE)
+    set_tests_properties(benchmark_hot_smoke benchmark_hot_invalid PROPERTIES TIMEOUT 30)
     add_test(NAME benchmark_invalid COMMAND read_mostly_benchmark --threads 0)
     set_tests_properties(benchmark_invalid PROPERTIES WILL_FAIL TRUE)
     set_tests_properties(benchmark_smoke benchmark_batch_smoke snapshot_cost_smoke

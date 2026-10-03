@@ -92,6 +92,11 @@ flowchart LR
 Validation and admission may fail before the swap. Readers racing publication
 may receive the old or new version, but never a partly built candidate.
 
+The diagram describes a patch transaction. Full-table `replace_all` takes a
+shorter construction path: start empty, insert replacement pairs, validate,
+check live budgets and publish. It skips copying the old table, not validation
+or lifetime protection. Input strings are still copied into owned storage.
+
 ## 6. Retention: an old version is still needed
 
 “Retired” means **no longer current**, not “already destroyed.” An old version

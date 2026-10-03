@@ -84,9 +84,10 @@ benefit from one stable view. Updates copy the entire table, so a large,
 write-heavy database is not a good fit. This is an in-memory library, not a
 persistent database, network server, or full RCU implementation.
 
-Hash lookup is average O(1), worst-case O(n). Updating is average O(n + k), where
-n is table size and k is the number of operations, plus string copying and
-allocation. Long-lived views retain old versions. Benchmark your workload;
+Hash lookup is average O(1), worst-case O(n). Transaction updates are average
+O(n + k), where n is table size and k is the number of operations, plus string
+copying and allocation. Whole-table replacement builds directly from its input
+without copying the old table. Long-lived views retain old versions. Benchmark your workload;
 the project makes no universal speedup claim.
 
 ## Status and further reading

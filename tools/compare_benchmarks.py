@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 FIELDS = ("mode", "threads", "entries", "key_bytes", "value_bytes", "batch",
-          "write_permille", "burst", "reads", "writes")
+          "write_permille", "burst", "reads", "writes", "hot_permille")
 ENV_FIELDS = ("cpu", "os", "compiler", "build_flags", "affinity", "governor")
 
 
@@ -17,7 +17,9 @@ def load(path):
     with Path(path).open(encoding="utf-8") as stream:
         rows = csv.DictReader(line for line in stream if not line.startswith("#"))
         for row in rows:
-            key = tuple(row[field] for field in FIELDS)
+            # Older uniform captures did not include hot-key configuration.
+            key = tuple(row.get(field, "0") if field == "hot_permille" else row[field]
+                        for field in FIELDS)
             value = float(row["ops_per_second"])
             if not math.isfinite(value) or value <= 0:
                 raise ValueError("throughput must be finite and positive")

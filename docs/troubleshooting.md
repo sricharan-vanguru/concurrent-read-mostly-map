@@ -2,6 +2,17 @@
 
 [Documentation home](README.md)
 
+## Does optimized replacement remove retention costs?
+
+No. Direct replacement avoids copying the old table while constructing the
+candidate, but does not destroy data still owned by readers. Current data,
+retired snapshots and the new candidate can coexist. Live-budget rejection is
+still possible. Input strings and hash-table storage still require allocation;
+logical payload limits are not physical heap limits.
+
+For performance investigation, compare replacement construction and retained
+memory separately using [the benchmark guide](../benchmarks/README.md).
+
 ## My snapshot still shows the old value
 
 That is expected. A snapshot is a stable view, not a live subscription. Acquire

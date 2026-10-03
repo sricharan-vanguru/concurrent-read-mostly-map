@@ -70,9 +70,7 @@ struct ReadMostlyMap::Impl {
         }
         return std::nullopt;
     }
-    CommitResult publish(const Snapshot &source, const UpdateTransaction &transaction,
-                         SnapshotLimits build_limits) {
-        auto candidate = SnapshotBuilder(build_limits).build(source, transaction);
+    CommitResult publish(const Snapshot &source, const Snapshot &candidate) {
         const auto next_version = candidate.version();
         const bool accepted = hazard ? hazard->publish(candidate, registry)
                                      : publication->publish(candidate, registry);
@@ -190,7 +188,7 @@ CommitResult ReadMostlyMap::commit(const UpdateTransaction &transaction,
         if (const auto rejected = impl_->rejection(current, expected_version)) {
             return *rejected;
         }
-        return impl_->publish(current, transaction, impl_->limits);
+        return impl_->publish(current, SnapshotBuilder(impl_->limits).build(current, transaction));
     });
 }
 CommitResult ReadMostlyMap::replace_all(std::span<const Entry> entries,
@@ -200,19 +198,8 @@ CommitResult ReadMostlyMap::replace_all(std::span<const Entry> entries,
         if (const auto rejected = impl_->rejection(current, expected_version)) {
             return *rejected;
         }
-        if (entries.size() > impl_->limits.max_operations) {
-            throw std::length_error("replacement operation limit exceeded");
-        }
-        UpdateTransaction replacement;
-        replacement.clear();
-        for (const auto &[key, value] : entries) {
-            replacement.insert_or_assign(key, value);
-        }
-        auto build_limits = impl_->limits;
-        if (build_limits.max_operations != std::numeric_limits<std::size_t>::max()) {
-            ++build_limits.max_operations;
-        }
-        return impl_->publish(current, replacement, build_limits);
+        return impl_->publish(current,
+                              SnapshotBuilder(impl_->limits).build_replacement(current, entries));
     });
 }
 void ReadMostlyMap::close() {
